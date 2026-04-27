@@ -1,0 +1,10 @@
+# YOLO dataset descriptor for puzzle panel detection.
+# Paths are relative to this file.
+
+path: ./dataset
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: puzzle_panel
