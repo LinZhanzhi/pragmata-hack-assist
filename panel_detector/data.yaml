@@ -1,7 +1,7 @@
 # YOLO pose dataset: detect the puzzle panel + its 4 corner keypoints.
 # Paths are relative to this file.
 
-path: ./dataset
+path: D:/pathSolver/panel_detector/dataset
 train: images/train
 val: images/val
 test: images/test

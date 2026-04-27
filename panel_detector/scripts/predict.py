@@ -25,6 +25,34 @@ DEFAULT_WEIGHTS = ROOT / "runs" / "panel_detector" / "weights" / "best.pt"
 OUT_W = 800
 OUT_H = 800
 
+# The puzzle panel is rendered with a fixed perspective: the top edge
+# tilts up toward the right and the bottom edge tilts down toward the
+# right with slopes that are essentially constant across all observed
+# screenshots.  Empirically fitted (least squares) on the labeled
+# annotation set with the assumption that puzzle TR == bbox top-right
+# and puzzle BR == bbox bottom-right (mean reconstruction error ~5 px
+# per corner at 1920x1080).
+TOP_EDGE_SLOPE = -0.0907  # dy/dx in image pixel space
+BOT_EDGE_SLOPE = +0.0409
+
+
+def corners_from_bbox(xyxy: np.ndarray) -> np.ndarray:
+    """Reconstruct the 4 puzzle corners (TL, TR, BR, BL) from an
+    axis-aligned bbox using the fixed top/bottom edge slopes.
+
+    The right edge of the puzzle is essentially vertical, so we take
+    TR and BR straight from the bbox right side.  TL and BL are then
+    found by walking left along each edge with the known slope until
+    we hit the bbox left edge.
+    """
+    x1, y1, x2, y2 = [float(v) for v in xyxy]
+    width = x1 - x2  # negative; (left - right)
+    tr = (x2, y1)
+    br = (x2, y2)
+    tl = (x1, y1 + TOP_EDGE_SLOPE * width)
+    bl = (x1, y2 + BOT_EDGE_SLOPE * width)
+    return np.array([tl, tr, br, bl], dtype=np.float32)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -34,6 +62,12 @@ def main() -> None:
     parser.add_argument("--out-size", type=int, nargs=2, default=(OUT_W, OUT_H),
                         metavar=("W", "H"),
                         help="Output canvas size after perspective warp.")
+    parser.add_argument("--corner-mode", choices=("bbox-slope", "keypoints"),
+                        default="bbox-slope",
+                        help="How to derive the 4 puzzle corners. "
+                             "'bbox-slope' (default) reconstructs them from "
+                             "the bbox using fixed edge slopes; 'keypoints' "
+                             "uses the model's predicted keypoints directly.")
     args = parser.parse_args()
 
     model = YOLO(str(args.weights))
@@ -47,15 +81,20 @@ def main() -> None:
     boxes = res.boxes
     best = int(boxes.conf.argmax().item())
 
-    if res.keypoints is None or len(res.keypoints.xy) <= best:
-        print("Model did not return keypoints; check the trained weights.")
-        return
-
-    # Keypoints come back as a (num_objects, 4, 2) tensor in image pixels.
-    kpts = res.keypoints.xy[best].cpu().numpy().astype(np.float32)
-    if kpts.shape != (4, 2):
-        print(f"Unexpected keypoint shape: {kpts.shape}")
-        return
+    if args.corner_mode == "bbox-slope":
+        # Use the bbox + fixed edge slopes; the keypoint head tends to
+        # mislocalize the corners even when the bbox is tight.
+        xyxy = boxes.xyxy[best].cpu().numpy()
+        kpts = corners_from_bbox(xyxy)
+    else:
+        if res.keypoints is None or len(res.keypoints.xy) <= best:
+            print("Model did not return keypoints; check the trained weights.")
+            return
+        # Keypoints come back as (num_objects, 4, 2) in image pixels.
+        kpts = res.keypoints.xy[best].cpu().numpy().astype(np.float32)
+        if kpts.shape != (4, 2):
+            print(f"Unexpected keypoint shape: {kpts.shape}")
+            return
 
     img = cv2.imread(str(args.image))
     if img is None:
