@@ -1,6 +1,7 @@
 """
-Run the trained panel detector on a single screenshot.
-Saves a cropped puzzle-panel image next to the input.
+Run the trained panel detector + keypoint model on a single screenshot.
+Reads the 4 corner keypoints (TL, TR, BR, BL) and warps the trapezoidal
+panel to a clean rectangle saved as <input>_panel.png.
 
 Usage:
     python scripts/predict.py path/to/screenshot.png
@@ -12,11 +13,17 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from PIL import Image
+import cv2
+import numpy as np
 from ultralytics import YOLO
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_WEIGHTS = ROOT / "runs" / "panel_detector" / "weights" / "best.pt"
+
+# Output canonical size of the warped panel.  Tweak as you like; this is
+# the working canvas for downstream grid-line analysis and cell slicing.
+OUT_W = 800
+OUT_H = 800
 
 
 def main() -> None:
@@ -24,8 +31,9 @@ def main() -> None:
     parser.add_argument("image", type=Path)
     parser.add_argument("--weights", type=Path, default=DEFAULT_WEIGHTS)
     parser.add_argument("--conf", type=float, default=0.25)
-    parser.add_argument("--margin", type=int, default=4,
-                        help="Pixels of padding to add around the detected box.")
+    parser.add_argument("--out-size", type=int, nargs=2, default=(OUT_W, OUT_H),
+                        metavar=("W", "H"),
+                        help="Output canvas size after perspective warp.")
     args = parser.parse_args()
 
     model = YOLO(str(args.weights))
@@ -35,23 +43,40 @@ def main() -> None:
         print("No puzzle panel detected.")
         return
 
-    # Pick the highest-confidence box.
-    boxes = results[0].boxes
+    res = results[0]
+    boxes = res.boxes
     best = int(boxes.conf.argmax().item())
-    x1, y1, x2, y2 = boxes.xyxy[best].tolist()
 
-    img = Image.open(args.image).convert("RGB")
-    W, H = img.size
-    m = args.margin
-    crop = img.crop((
-        max(0, int(x1) - m),
-        max(0, int(y1) - m),
-        min(W, int(x2) + m),
-        min(H, int(y2) + m),
-    ))
+    if res.keypoints is None or len(res.keypoints.xy) <= best:
+        print("Model did not return keypoints; check the trained weights.")
+        return
+
+    # Keypoints come back as a (num_objects, 4, 2) tensor in image pixels.
+    kpts = res.keypoints.xy[best].cpu().numpy().astype(np.float32)
+    if kpts.shape != (4, 2):
+        print(f"Unexpected keypoint shape: {kpts.shape}")
+        return
+
+    img = cv2.imread(str(args.image))
+    if img is None:
+        print(f"Could not read image: {args.image}")
+        return
+
+    out_w, out_h = args.out_size
+    dst = np.array([
+        [0, 0],            # TL
+        [out_w - 1, 0],    # TR
+        [out_w - 1, out_h - 1],  # BR
+        [0, out_h - 1],    # BL
+    ], dtype=np.float32)
+
+    M = cv2.getPerspectiveTransform(kpts, dst)
+    warped = cv2.warpPerspective(img, M, (out_w, out_h))
+
     out = args.image.with_name(args.image.stem + "_panel.png")
-    crop.save(out)
-    print(f"Saved crop: {out} (conf={boxes.conf[best].item():.3f})")
+    cv2.imwrite(str(out), warped)
+    print(f"Saved warped panel: {out} (conf={boxes.conf[best].item():.3f})")
+    print(f"Corners (TL, TR, BR, BL): {kpts.tolist()}")
 
 
 if __name__ == "__main__":

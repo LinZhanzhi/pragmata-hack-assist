@@ -1,5 +1,6 @@
 """
-Train a YOLO detector for the single class `puzzle_panel`.
+Train a YOLO pose model that detects the puzzle panel and its 4 corner
+keypoints (TL, TR, BR, BL).  Single class: `puzzle_panel`.
 
 Usage:
     python scripts/train.py
@@ -15,10 +16,10 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_YAML = ROOT / "data.yaml"
 RUNS_DIR = ROOT / "runs"
 
-# Nano model is plenty for one large UI rectangle.
-BASE_MODEL = "yolov8n.pt"
+# Pose-nano: cheap, perfect for a single object with 4 keypoints.
+BASE_MODEL = "yolov8n-pose.pt"
 
-EPOCHS = 80
+EPOCHS = 100
 IMG_SIZE = 640
 BATCH = 16
 
