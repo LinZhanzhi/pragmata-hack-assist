@@ -1,3 +1,201 @@
+# Panel Detection — Status & Plan
+
+> Updated April 28, 2026. The bulk of this document below is historical
+> design notes; this top section is the live plan.
+
+## Where we are now
+
+Stages 1–3 of the original plan are working end-to-end on the 40
+labeled training frames:
+
+1. **Panel localization** — YOLOv8n-pose detector trained on
+   `panel_detector/dataset` finds the `puzzle_panel` bbox with conf
+   ≈ 0.98 on every test frame.
+2. **Corner reconstruction** — Instead of trusting the (noisy) keypoint
+   head, [predict.py](../panel_detector/scripts/predict.py) reconstructs
+   the four puzzle corners from the bbox using two empirically-fitted,
+   constant edge slopes (`TOP=-0.0907`, `BOT=+0.0409` in 1920×1080 px
+   space). Mean reconstruction error ≈ 5 px / corner across all 40
+   labeled frames. Result is then warped to a canonical 800×800 panel.
+3. **Grid dimension inference** —
+   [infer_grid.py](../panel_detector/scripts/infer_grid.py) infers
+   `N ∈ {3..8}` from the warped panel using autocorrelation of grayscale
+   row/column projections (the bright gridline crosshairs produce
+   periodic peaks). Cols and rows vote independently and must agree.
+   Verified 8/8 on the verify set.
+4. **Cell slicing** —
+   [slice_cells.py](../panel_detector/scripts/slice_cells.py) refits
+   gridline offset+spacing at the chosen N, shrinks each cell rect by
+   12% to drop the bright separator/crosshair, and dumps
+   `<frame>_N<n>_r<row>_c<col>.png` (64×64) into a labeling queue.
+   191 clean crops produced from the 8 verify panels.
+
+## What's left: Stage 4 — per-cell classification
+
+This is where new training data + a new model are needed.
+
+### 4.1 Class taxonomy (proposed)
+
+Based on the cell crops generated so far:
+
+| Class           | Description                                              |
+|-----------------|----------------------------------------------------------|
+| `empty`         | Walkable cell (just the inner crosshair, no icon).       |
+| `forbidden`     | Grey/red warning triangle — must not enter.              |
+| `start`         | Green power button with the active/highlighted ring.     |
+| `destination`   | Green power button without the active ring.              |
+| `reward_open`   | Blue `OPEN` arrows — teleport / shortcut tile.           |
+| `reward_freeze` | Yellow `FREEZE` lightning — special reward tile.         |
+| `cursor`        | Bright sparkle currently always at `r0_c0` — possibly a  |
+|                 | fixed UI marker; keep as its own class until we confirm. |
+| `unknown`       | Transition / mid-animation frames; keep as a sink class  |
+|                 | so the classifier can defer instead of misfiring.        |
+
+Notes:
+
+- `start` vs `destination` distinction needs to be confirmed — they may
+  actually be the same icon and the role is just positional. If so,
+  collapse into a single `power` class and let the solver decide which
+  endpoint is which (start is the cell the player currently occupies).
+- We may discover more classes (e.g. coin reward, enemy tile) once we
+  see more diverse boards. Plan for adding classes without retraining
+  from scratch — e.g. start with a small backbone + replaceable head.
+
+### 4.2 Dataset
+
+Folder layout (matches `dataset/cell_classification/` from the original
+plan):
+
+```text
+panel_detector/dataset/cells/
+  queue/                      # unlabeled output of slice_cells.py
+  train/
+    empty/
+    forbidden/
+    start/
+    destination/
+    reward_open/
+    reward_freeze/
+    cursor/
+    unknown/
+  val/
+    <same class subfolders>
+  test/
+    <same class subfolders>
+```
+
+Labeling workflow:
+
+1. Run `slice_cells.py` over every captured frame → fills `queue/`.
+2. Manually move each PNG into the matching class folder. The filename
+   already encodes `<frame>_N<n>_r<row>_c<col>` so we always know which
+   board it came from for split-by-session.
+3. Periodically dedupe near-identical crops (same icon, similar
+   background) — for v1 prefer diversity over volume.
+
+Target sizes for the first usable classifier:
+
+- ≥ 100 labeled examples per class for `empty`, `forbidden`,
+  `power` (or `start`/`destination`).
+- ≥ 30 examples per class for the rare ones (`reward_open`,
+  `reward_freeze`, `cursor`).
+- Cover all observed board sizes (3×3 .. 8×8). Smaller cells at 8×8
+  matter most because icons get tiny.
+
+### 4.3 Train/val/test split
+
+Split **by capture session**, never randomly across cells from the same
+panel. Cells from one panel are highly correlated (same lighting,
+same icon style) and randomly splitting them inflates val accuracy. A
+sensible default:
+
+- train: sessions 1–6
+- val:   session 7
+- test:  session 8
+
+When we have only one capture session, hold out whole *frames* (not
+individual cells) for val/test.
+
+### 4.4 Model
+
+Start tiny:
+
+- Input: 64×64 RGB.
+- Backbone: MobileNetV3-Small or a 4-conv CNN (~50 K params).
+- Head: linear → `num_classes` softmax.
+- Loss: cross-entropy with class weights to handle imbalance.
+- Optimizer: AdamW, cosine LR, 20–50 epochs.
+- Augmentations:
+  - `±5°` rotation (small, the warp is already aligned).
+  - brightness/contrast jitter.
+  - slight scale jitter (0.9–1.1×) to mimic 3×3 vs 8×8 cell sizes.
+  - random horizontal flip **only if** flipping doesn't change the
+    class (probably fine for icons here, but verify on
+    `reward_open` arrows).
+
+Metrics to watch:
+
+- Per-class precision/recall (not just overall accuracy — `empty`
+  dominates the dataset).
+- Confusion matrix — especially `start` vs `destination`,
+  `reward_open` vs `reward_freeze`.
+- Calibration: we'll use the predicted probability for the
+  temporal-vote / `unknown` deferral logic.
+
+### 4.5 New scripts to add
+
+Once we have ≥ ~50 labeled cells/class, add:
+
+- `scripts/train_cell_classifier.py` — load
+  `dataset/cells/{train,val}`, train a small CNN, save `best.pt`.
+- `scripts/predict_cells.py` — given a panel image (or a folder of
+  panels), run the full pipeline (warp → infer N → slice → classify)
+  and output an `N×N` label grid as JSON, plus a debug overlay PNG with
+  each cell labeled.
+- `scripts/eval_cells.py` — confusion matrix + per-class P/R on the
+  test split, with a CLI flag to print misclassified cells for review.
+
+### 4.6 Inference pipeline (target end-to-end)
+
+```text
+frame
+  -> YOLO detect (best bbox)
+  -> corners_from_bbox (fixed slopes)
+  -> warpPerspective -> 800x800 panel
+  -> infer_grid -> N + gridline positions
+  -> slice cells (12% shrink, 64x64)
+  -> cell classifier -> per-cell label + confidence
+  -> NxN label grid -> solver
+```
+
+Plus a temporal-vote layer: run on 2–3 consecutive frames and majority-
+vote per cell before handing the grid to the solver. Cells with
+ambiguous votes or `unknown` predictions cause the system to wait one
+more frame.
+
+### 4.7 Immediate next steps (in order)
+
+1. **Capture more frames** across diverse boards (priority: 3×3, 7×7,
+   8×8 — least represented today). The current 40-frame set is
+   panel-detector training data, not cell-classifier data.
+2. **Run `slice_cells.py`** over the full set to populate `queue/`.
+3. **Manually sort** the queue into class folders; aim for the targets
+   in §4.2.
+4. **Implement `train_cell_classifier.py`** and train a v1 model.
+5. **Implement `predict_cells.py`** and validate end-to-end on held-out
+   frames.
+6. Iterate: add new classes, capture hard cases (motion blur,
+   transitions), retrain.
+
+---
+
+# Historical design notes
+
+The remainder of this document is the original brainstorming and
+remains for context.
+
+---
+
 Yes — with those constraints, I’d update the recommendation quite a bit.
 
 Because the puzzle UI stays as a **clean rectangular screen-space element with no perspective distortion**, but its **position and overall scale vary**, this is a very favorable CV problem. You probably do **not** need a heavy end-to-end model first; a two-stage pipeline should work very well: **detect/localize the puzzle panel, then normalize it and classify cells**. [github](https://github.com/MulongXie/UIED)
