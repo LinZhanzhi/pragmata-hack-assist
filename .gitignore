@@ -1,19 +1,6 @@
 # Python / training artifacts
 __pycache__/
 *.pyc
-.venv/
-venv/
 
-# YOLO outputs and weights
-panel_detector/runs/
-panel_detector/models/
-*.pt
-
-# Dataset (don't commit large binary frames; keep folder structure with .gitkeep)
-panel_detector/raw/*.png
-panel_detector/raw/*.jpg
-panel_detector/raw/*.jpeg
-panel_detector/raw/*.txt
-panel_detector/dataset/images/**/*
-panel_detector/dataset/labels/**/*
+# Keep folder structure even when empty
 !**/.gitkeep
