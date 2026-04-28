@@ -38,18 +38,37 @@ def slice_panel(
     panel_bgr: np.ndarray,
     size: int = 64,
     shrink: float = 0.12,
+    force_n: int | None = None,
 ) -> tuple[int, list[tuple[int, int, np.ndarray]], dict]:
     """Infer the grid and return a list of (row, col, cell_crop) tuples.
 
     `shrink` is the fraction of cell width/height to trim from each side
     before resizing, so the bright gridlines are excluded.  e.g. 0.12
     means keep the central 76% of the cell.
+
+    If `force_n` is given, the comb-fit at that N is used instead of
+    the autocorrelation-voted N. Useful when the autodetect picks a
+    harmonic (e.g. a 6x6 board with a merged 2x2 dead zone is sometimes
+    misread as 3x3).
     """
     res = infer_grid(panel_bgr)
-    n = res["N"]
-    xs = gridline_positions(res["col"], n)
-    ys = gridline_positions(res["row"], n)
+    n = force_n if force_n is not None else res["N"]
+    if force_n is not None:
+        res["N"] = force_n
+        res["forced"] = True
     H, W = panel_bgr.shape[:2]
+    if force_n is not None:
+        # The warped panel spans the full canvas (0..W, 0..H) by
+        # construction, so the most reliable fit at a forced N is just
+        # an evenly-spaced grid. The comb-fit can drift toward a
+        # harmonic offset when the autocorrelation voted a different N.
+        xs = np.linspace(0, W, n + 1)
+        ys = np.linspace(0, H, n + 1)
+    else:
+        xs = gridline_positions(res["col"], n)
+        ys = gridline_positions(res["row"], n)
+    res["xs"] = xs
+    res["ys"] = ys
 
     cells: list[tuple[int, int, np.ndarray]] = []
     for r in range(n):
@@ -74,8 +93,11 @@ def slice_panel(
 
 def render_debug(panel_bgr: np.ndarray, res: dict, shrink: float, out_path: Path) -> None:
     n = res["N"]
-    xs = gridline_positions(res["col"], n)
-    ys = gridline_positions(res["row"], n)
+    xs = res.get("xs")
+    ys = res.get("ys")
+    if xs is None or ys is None:
+        xs = gridline_positions(res["col"], n)
+        ys = gridline_positions(res["row"], n)
     overlay = panel_bgr.copy()
     H, W = overlay.shape[:2]
     for x in xs:
@@ -104,12 +126,13 @@ def frame_id_from_panel_path(p: Path) -> str:
     return stem
 
 
-def process_one(img_path: Path, out_dir: Path, size: int, shrink: float, debug: bool) -> dict:
+def process_one(img_path: Path, out_dir: Path, size: int, shrink: float, debug: bool,
+                force_n: int | None = None) -> dict:
     img = cv2.imread(str(img_path))
     if img is None:
         print(f"[skip] cannot read {img_path}")
         return {}
-    n, cells, res = slice_panel(img, size=size, shrink=shrink)
+    n, cells, res = slice_panel(img, size=size, shrink=shrink, force_n=force_n)
     frame_id = frame_id_from_panel_path(img_path)
     out_dir.mkdir(parents=True, exist_ok=True)
     for r, c, crop in cells:
@@ -139,6 +162,8 @@ def main() -> None:
                     help="Fraction trimmed from each side of every cell before resize. Default 0.12.")
     ap.add_argument("--debug", action="store_true",
                     help="Also write a per-panel overlay showing the inner cell rects.")
+    ap.add_argument("--force-n", type=int, default=None,
+                    help="Override the inferred N (e.g. 6 for a 6x6 board the autodetect missed).")
     args = ap.parse_args()
 
     if args.input.is_dir():
@@ -152,7 +177,8 @@ def main() -> None:
     total_cells = 0
     summary = []
     for f in files:
-        info = process_one(f, args.out, args.size, args.shrink, args.debug)
+        info = process_one(f, args.out, args.size, args.shrink, args.debug,
+                           force_n=args.force_n)
         if info:
             total_cells += info["cells"]
             summary.append(info)
