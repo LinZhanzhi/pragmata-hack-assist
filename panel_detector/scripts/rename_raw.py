@@ -47,6 +47,10 @@ def main() -> None:
 
     all_files = sorted(p for p in RAW.iterdir()
                        if p.is_file() and p.suffix.lower() in IMAGE_EXTS)
+    # Skip derived artifacts (e.g. *_panel.png produced by predict.py).
+    DERIVED_SUFFIXES = ("_panel",)
+    all_files = [p for p in all_files
+                 if not any(p.stem.endswith(s) for s in DERIVED_SUFFIXES)]
     to_rename = [p for p in all_files if not CANONICAL.match(p.name)]
 
     if not to_rename:
