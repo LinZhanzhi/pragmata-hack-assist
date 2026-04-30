@@ -20,10 +20,14 @@ from ultralytics import YOLO
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_WEIGHTS = ROOT / "runs" / "panel_detector" / "weights" / "best.pt"
 
-# Output canonical size of the warped panel.  Tweak as you like; this is
-# the working canvas for downstream grid-line analysis and cell slicing.
-OUT_W = 800
-OUT_H = 800
+# Cap on the longer side of the warped panel.  We preserve the source
+# bbox aspect ratio so that in-game square cells stay square in the warp
+# (8x5 panels yield ~800x500, 4x4 panels yield ~800x800, etc).
+MAX_SIDE = 800
+
+# Backwards-compatible defaults (only used when --out-size is forced).
+OUT_W = MAX_SIDE
+OUT_H = MAX_SIDE
 
 # The puzzle panel is rendered with a fixed perspective: the top edge
 # tilts up toward the right and the bottom edge tilts down toward the
@@ -34,6 +38,32 @@ OUT_H = 800
 # per corner at 1920x1080).
 TOP_EDGE_SLOPE = -0.0907  # dy/dx in image pixel space
 BOT_EDGE_SLOPE = +0.0409
+
+
+def warp_size_from_bbox(xyxy: np.ndarray, max_side: int = MAX_SIDE) -> tuple[int, int]:
+    """Pick a warp output size that preserves the bbox aspect ratio.
+
+    Cells in-game are always square; the panel rectangle's aspect is
+    determined entirely by (n_cols, n_rows). The right edge of the
+    detected bbox coincides with the panel's right edge (essentially
+    vertical), and the bbox left edge sits at the panel's TL/BL x.
+    So bbox width/height tracks panel width/height to <1% (the slope
+    correction is sqrt(1+slope^2) ~ 1.004 for slope=-0.09).
+
+    Returns (out_w, out_h) with the longer side = max_side.
+    """
+    x1, y1, x2, y2 = [float(v) for v in xyxy]
+    bw = abs(x2 - x1)
+    bh = abs(y2 - y1)
+    if bw <= 0 or bh <= 0:
+        return max_side, max_side
+    if bw >= bh:
+        out_w = max_side
+        out_h = int(round(max_side * bh / bw))
+    else:
+        out_h = max_side
+        out_w = int(round(max_side * bw / bh))
+    return out_w, out_h
 
 
 def corners_from_bbox(xyxy: np.ndarray) -> np.ndarray:
@@ -59,9 +89,11 @@ def main() -> None:
     parser.add_argument("image", type=Path)
     parser.add_argument("--weights", type=Path, default=DEFAULT_WEIGHTS)
     parser.add_argument("--conf", type=float, default=0.25)
-    parser.add_argument("--out-size", type=int, nargs=2, default=(OUT_W, OUT_H),
+    parser.add_argument("--out-size", type=int, nargs=2, default=None,
                         metavar=("W", "H"),
-                        help="Output canvas size after perspective warp.")
+                        help="Force output canvas size after warp. "
+                             "Default: preserve bbox aspect with longer "
+                             f"side = {MAX_SIDE}.")
     parser.add_argument("--corner-mode", choices=("bbox-slope", "keypoints"),
                         default="bbox-slope",
                         help="How to derive the 4 puzzle corners. "
@@ -101,7 +133,10 @@ def main() -> None:
         print(f"Could not read image: {args.image}")
         return
 
-    out_w, out_h = args.out_size
+    if args.out_size is not None:
+        out_w, out_h = args.out_size
+    else:
+        out_w, out_h = warp_size_from_bbox(boxes.xyxy[best].cpu().numpy())
     dst = np.array([
         [0, 0],            # TL
         [out_w - 1, 0],    # TR

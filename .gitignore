@@ -6,3 +6,10 @@ venv/
 
 # Keep folder structure even when empty
 !**/.gitkeep
+
+# Label Studio: keep the SQLite DB (the annotations live here) but never
+# commit per-machine secrets or runtime journals.
+panel_detector/labelstudio/.lsdata/.env
+panel_detector/labelstudio/.lsdata/**/*.sqlite3-journal
+panel_detector/labelstudio/.lsdata/**/*.sqlite3-wal
+panel_detector/labelstudio/.lsdata/**/*.sqlite3-shm

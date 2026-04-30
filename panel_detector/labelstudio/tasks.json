@@ -1,0 +1,2257 @@
+[
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0001.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 71.39121338912135,
+              "y": 22.87308228730823,
+              "width": 19.76987447698744,
+              "height": 34.867503486750344,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0002.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.05753138075315,
+              "y": 21.478382147838214,
+              "width": 23.06485355648536,
+              "height": 40.725244072524404,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0003.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.9989539748954,
+              "y": 23.012552301255234,
+              "width": 21.103556485355654,
+              "height": 37.51743375174338,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0004.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 72.41108786610879,
+              "y": 21.757322175732217,
+              "width": 21.338912133891228,
+              "height": 37.517433751743376,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0005.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.13598326359833,
+              "y": 21.199442119944212,
+              "width": 23.221757322175733,
+              "height": 40.725244072524404,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0006.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 71.0774058577406,
+              "y": 23.01255230125523,
+              "width": 20.946652719665266,
+              "height": 37.65690376569037,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0007.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.92050209205021,
+              "y": 23.152022315202235,
+              "width": 21.103556485355654,
+              "height": 36.959553695955364,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0008.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.9989539748954,
+              "y": 23.430962343096237,
+              "width": 21.18200836820084,
+              "height": 36.959553695955364,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0009.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.84205020920487,
+              "y": 23.291492329149268,
+              "width": 21.338912133891363,
+              "height": 37.7963737796373,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0010.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 72.36156274376032,
+              "y": 23.601076396402494,
+              "width": 21.229524269285548,
+              "height": 36.62235992545216,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0011.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.92050209205021,
+              "y": 23.430962343096237,
+              "width": 21.103556485355654,
+              "height": 37.099023709902376,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0012.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 72.48953974895397,
+              "y": 23.570432357043238,
+              "width": 21.103556485355668,
+              "height": 35.98326359832636,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0013.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.9989539748954,
+              "y": 23.29149232914923,
+              "width": 20.94665271966528,
+              "height": 36.40167364016736,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0014.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 72.48953974895397,
+              "y": 25.10460251046025,
+              "width": 17.651673640167388,
+              "height": 31.241283124128323,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0015.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 73.19560669456068,
+              "y": 23.84937238493724,
+              "width": 19.377615062761507,
+              "height": 33.61227336122733,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0016.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.92050209205021,
+              "y": 23.152022315202235,
+              "width": 21.103556485355654,
+              "height": 36.959553695955364,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0017.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.9989539748954,
+              "y": 23.57043235704324,
+              "width": 20.94665271966528,
+              "height": 36.95955369595537,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0018.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.92050209205021,
+              "y": 23.291492329149236,
+              "width": 21.103556485355654,
+              "height": 37.51743375174338,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0019.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.9989539748954,
+              "y": 23.57043235704324,
+              "width": 20.94665271966528,
+              "height": 36.95955369595537,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0020.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.92050209205021,
+              "y": 23.570432357043238,
+              "width": 21.103556485355654,
+              "height": 36.82008368200836,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0021.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 72.41108786610879,
+              "y": 23.70990237099024,
+              "width": 21.338912133891228,
+              "height": 36.541143654114364,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0022.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.9989539748954,
+              "y": 23.291492329149232,
+              "width": 21.025104602510467,
+              "height": 37.23849372384937,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0023.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.9989539748954,
+              "y": 23.152022315202235,
+              "width": 20.94665271966528,
+              "height": 37.517433751743376,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0024.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 71.0774058577406,
+              "y": 23.012552301255234,
+              "width": 20.86820083682008,
+              "height": 37.79637377963738,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0025.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.9989539748954,
+              "y": 23.291492329149236,
+              "width": 21.025104602510467,
+              "height": 37.37796373779638,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0026.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 72.48953974895396,
+              "y": 24.68619246861925,
+              "width": 17.730125523012575,
+              "height": 31.799163179916313,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0027.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.92050209205021,
+              "y": 23.152022315202235,
+              "width": 21.103556485355654,
+              "height": 36.959553695955364,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0028.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.9989539748954,
+              "y": 22.873082287308232,
+              "width": 21.025104602510467,
+              "height": 37.51743375174337,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0029.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 72.41108786610879,
+              "y": 23.291492329149232,
+              "width": 21.182008368200854,
+              "height": 37.23849372384937,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0030.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 71.0774058577406,
+              "y": 23.29149232914923,
+              "width": 20.946652719665266,
+              "height": 36.82008368200836,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0031.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 69.35146443514645,
+              "y": 19.665271966527197,
+              "width": 24.790794979079493,
+              "height": 43.65411436541143,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0032.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.9989539748954,
+              "y": 23.01255230125523,
+              "width": 20.94665271966528,
+              "height": 37.65690376569037,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0033.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.9989539748954,
+              "y": 22.733612273361224,
+              "width": 20.868200836820094,
+              "height": 37.65690376569037,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0034.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 69.97907949790796,
+              "y": 21.05997210599721,
+              "width": 23.535564853556494,
+              "height": 41.84100418410042,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0035.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.92050209205021,
+              "y": 23.291492329149232,
+              "width": 21.18200836820084,
+              "height": 37.65690376569037,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0036.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 72.3326359832636,
+              "y": 22.594142259414227,
+              "width": 21.809623430962347,
+              "height": 38.35425383542538,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0037.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 71.54811715481172,
+              "y": 23.012552301255234,
+              "width": 19.691422594142267,
+              "height": 35.00697350069734,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0038.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 73.1171548117155,
+              "y": 23.012552301255226,
+              "width": 19.926778242677813,
+              "height": 35.14644351464436,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0039.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 69.58682008368203,
+              "y": 20.2231520223152,
+              "width": 24.398535564853546,
+              "height": 43.23570432357043,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0040.png"
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "from_name": "label",
+            "to_name": "image",
+            "type": "rectanglelabels",
+            "original_width": 1920,
+            "original_height": 1080,
+            "image_rotation": 0,
+            "value": {
+              "x": 70.05753138075315,
+              "y": 21.33891213389121,
+              "width": 23.221757322175733,
+              "height": 41.00418410041841,
+              "rotation": 0,
+              "rectanglelabels": [
+                "puzzle_panel"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0041.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0042.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0043.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0044.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0045.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0046.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0047.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0048.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0049.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0050.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0051.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0052.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0053.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0054.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0055.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0056.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0057.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0058.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0059.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0060.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0061.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0062.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0063.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0064.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0065.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0066.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0067.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0068.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0069.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0070.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0071.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0072.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0073.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0074.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0075.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0076.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0077.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0078.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0079.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0080.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0081.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0082.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0083.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0084.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0085.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0086.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0087.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0088.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0089.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0090.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0091.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0092.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0093.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0094.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0095.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0096.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0097.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0098.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0099.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0100.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0101.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0102.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0103.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0104.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0105.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0106.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0107.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0108.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0109.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0110.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0111.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0112.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0113.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0114.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0115.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0116.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0117.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0118.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0119.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0120.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0121.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0122.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0123.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0124.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0125.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0126.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0127.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0128.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0129.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0130.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0131.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0132.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0133.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0134.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0135.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0136.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0137.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0138.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0139.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0140.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0141.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0142.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0143.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0144.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0145.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0146.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0147.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0148.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0149.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0150.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0151.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0152.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0153.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0154.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0155.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0156.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0157.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0158.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0159.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0160.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0161.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0162.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0163.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0164.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0165.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0166.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0167.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0168.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0169.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0170.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0171.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0172.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0173.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0174.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0175.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0176.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0177.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0178.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0179.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0180.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0181.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0182.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0183.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0184.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0185.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0186.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0187.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0188.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0189.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0190.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0191.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0192.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0193.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0194.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0195.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0196.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0197.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0198.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0199.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0200.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0201.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0202.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0203.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0204.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0205.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0206.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0207.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0208.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0209.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0210.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0211.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0212.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0213.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0214.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0215.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0216.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0217.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0218.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0219.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0220.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0221.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0222.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0223.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0224.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0225.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0226.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0227.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0228.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0229.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0230.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0231.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0232.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0233.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0234.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0235.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0236.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0237.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0238.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0239.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0240.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0241.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0242.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0243.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0244.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0245.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0246.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0247.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0248.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0249.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0250.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0251.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0252.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0253.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0254.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0255.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0256.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0257.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0258.png"
+    }
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=panel_detector/raw/s01_0259.png"
+    }
+  }
+]

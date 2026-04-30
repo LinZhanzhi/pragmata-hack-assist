@@ -15,7 +15,7 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
-from predict import corners_from_bbox, OUT_W, OUT_H, DEFAULT_WEIGHTS
+from predict import corners_from_bbox, warp_size_from_bbox, MAX_SIDE, DEFAULT_WEIGHTS
 
 
 def main() -> None:
@@ -23,18 +23,12 @@ def main() -> None:
     ap.add_argument("folder", type=Path)
     ap.add_argument("--weights", type=Path, default=DEFAULT_WEIGHTS)
     ap.add_argument("--conf", type=float, default=0.25)
-    ap.add_argument("--out-size", type=int, nargs=2, default=(OUT_W, OUT_H))
+    ap.add_argument("--out-size", type=int, nargs=2, default=None,
+                    help="Force output size; default preserves bbox aspect "
+                         f"with longer side = {MAX_SIDE}.")
     ap.add_argument("--force", action="store_true",
                     help="Re-warp even if <stem>_panel.png exists.")
     args = ap.parse_args()
-
-    out_w, out_h = args.out_size
-    dst = np.array([
-        [0, 0],
-        [out_w - 1, 0],
-        [out_w - 1, out_h - 1],
-        [0, out_h - 1],
-    ], dtype=np.float32)
 
     candidates = sorted(p for p in args.folder.glob("*.png")
                         if not p.stem.endswith("_panel"))
@@ -66,10 +60,20 @@ def main() -> None:
             print(f"[bad read] {img_path.name}")
             fail.append(img_path.name)
             continue
+        if args.out_size is not None:
+            out_w, out_h = args.out_size
+        else:
+            out_w, out_h = warp_size_from_bbox(xyxy)
+        dst = np.array([
+            [0, 0],
+            [out_w - 1, 0],
+            [out_w - 1, out_h - 1],
+            [0, out_h - 1],
+        ], dtype=np.float32)
         M = cv2.getPerspectiveTransform(kpts, dst)
         warped = cv2.warpPerspective(img, M, (out_w, out_h))
         cv2.imwrite(str(out_path), warped)
-        print(f"OK   {img_path.name} -> {out_path.name} (conf={boxes.conf[best].item():.3f})")
+        print(f"OK   {img_path.name} -> {out_path.name} ({out_w}x{out_h}, conf={boxes.conf[best].item():.3f})")
 
     if fail:
         print(f"\n{len(fail)} failure(s):")

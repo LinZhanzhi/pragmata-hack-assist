@@ -1,0 +1,7 @@
+<View>
+  <Image name="image" value="$image" zoom="true" zoomControl="true"
+         rotateControl="false"/>
+  <RectangleLabels name="label" toName="image">
+    <Label value="puzzle_panel" background="#00ffaa"/>
+  </RectangleLabels>
+</View>
