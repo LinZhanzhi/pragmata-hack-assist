@@ -39,41 +39,56 @@ def slice_panel(
     size: int = 64,
     shrink: float = 0.12,
     force_n: int | None = None,
-) -> tuple[int, list[tuple[int, int, np.ndarray]], dict]:
-    """Infer the grid and return a list of (row, col, cell_crop) tuples.
+    force_rows: int | None = None,
+    force_cols: int | None = None,
+) -> tuple[int, int, list[tuple[int, int, np.ndarray]], dict]:
+    """Infer the grid and return ``(n_rows, n_cols, cells, res)``.
+
+    ``cells`` is a list of ``(row, col, crop)`` tuples.
 
     `shrink` is the fraction of cell width/height to trim from each side
     before resizing, so the bright gridlines are excluded.  e.g. 0.12
     means keep the central 76% of the cell.
 
-    If `force_n` is given, the comb-fit at that N is used instead of
-    the autocorrelation-voted N. Useful when the autodetect picks a
-    harmonic (e.g. a 6x6 board with a merged 2x2 dead zone is sometimes
-    misread as 3x3).
+    Forcing options (any combination is allowed):
+      * ``force_n``      — shorthand: forces both rows and cols to N.
+      * ``force_rows``   — force only the row count.
+      * ``force_cols``   — force only the column count.
+
+    When an axis is forced, an even ``np.linspace`` grid is used along
+    that axis (the comb-fit can drift to a harmonic offset when the
+    autocorrelation voted differently).
     """
     res = infer_grid(panel_bgr)
-    n = force_n if force_n is not None else res["N"]
     if force_n is not None:
-        res["N"] = force_n
-        res["forced"] = True
+        if force_rows is None:
+            force_rows = force_n
+        if force_cols is None:
+            force_cols = force_n
+    n_rows = force_rows if force_rows is not None else res["N_rows"]
+    n_cols = force_cols if force_cols is not None else res["N_cols"]
+    res["N_rows"] = n_rows
+    res["N_cols"] = n_cols
+    res["N"] = n_rows if n_rows == n_cols else None
+    res["forced_rows"] = force_rows is not None
+    res["forced_cols"] = force_cols is not None
+
     H, W = panel_bgr.shape[:2]
-    if force_n is not None:
-        # The warped panel spans the full canvas (0..W, 0..H) by
-        # construction, so the most reliable fit at a forced N is just
-        # an evenly-spaced grid. The comb-fit can drift toward a
-        # harmonic offset when the autocorrelation voted a different N.
-        xs = np.linspace(0, W, n + 1)
-        ys = np.linspace(0, H, n + 1)
+    if force_cols is not None:
+        xs = np.linspace(0, W, n_cols + 1)
     else:
-        xs = gridline_positions(res["col"], n)
-        ys = gridline_positions(res["row"], n)
+        xs = gridline_positions(res["col"], n_cols)
+    if force_rows is not None:
+        ys = np.linspace(0, H, n_rows + 1)
+    else:
+        ys = gridline_positions(res["row"], n_rows)
     res["xs"] = xs
     res["ys"] = ys
 
     cells: list[tuple[int, int, np.ndarray]] = []
-    for r in range(n):
+    for r in range(n_rows):
         y0_f, y1_f = ys[r], ys[r + 1]
-        for c in range(n):
+        for c in range(n_cols):
             x0_f, x1_f = xs[c], xs[c + 1]
             cw = x1_f - x0_f
             ch = y1_f - y0_f
@@ -88,24 +103,25 @@ def slice_panel(
             crop = panel_bgr[y0:y1, x0:x1]
             crop = cv2.resize(crop, (size, size), interpolation=cv2.INTER_AREA)
             cells.append((r, c, crop))
-    return n, cells, res
+    return n_rows, n_cols, cells, res
 
 
 def render_debug(panel_bgr: np.ndarray, res: dict, shrink: float, out_path: Path) -> None:
-    n = res["N"]
+    n_rows = res["N_rows"]
+    n_cols = res["N_cols"]
     xs = res.get("xs")
     ys = res.get("ys")
     if xs is None or ys is None:
-        xs = gridline_positions(res["col"], n)
-        ys = gridline_positions(res["row"], n)
+        xs = gridline_positions(res["col"], n_cols)
+        ys = gridline_positions(res["row"], n_rows)
     overlay = panel_bgr.copy()
     H, W = overlay.shape[:2]
     for x in xs:
         cv2.line(overlay, (int(round(x)), 0), (int(round(x)), H - 1), (0, 255, 0), 1)
     for y in ys:
         cv2.line(overlay, (0, int(round(y))), (W - 1, int(round(y))), (0, 255, 0), 1)
-    for r in range(n):
-        for c in range(n):
+    for r in range(n_rows):
+        for c in range(n_cols):
             x0_f, x1_f = xs[c], xs[c + 1]
             y0_f, y1_f = ys[r], ys[r + 1]
             cw = x1_f - x0_f
@@ -127,27 +143,39 @@ def frame_id_from_panel_path(p: Path) -> str:
 
 
 def process_one(img_path: Path, out_dir: Path, size: int, shrink: float, debug: bool,
-                force_n: int | None = None) -> dict:
+                force_n: int | None = None,
+                force_rows: int | None = None,
+                force_cols: int | None = None) -> dict:
     img = cv2.imread(str(img_path))
     if img is None:
         print(f"[skip] cannot read {img_path}")
         return {}
-    n, cells, res = slice_panel(img, size=size, shrink=shrink, force_n=force_n)
+    n_rows, n_cols, cells, res = slice_panel(
+        img, size=size, shrink=shrink,
+        force_n=force_n, force_rows=force_rows, force_cols=force_cols,
+    )
     frame_id = frame_id_from_panel_path(img_path)
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Backward-compatible filenames: square boards still use _N<n>_,
+    # rectangular boards use _<rows>x<cols>_.
+    if n_rows == n_cols:
+        dim_tag = f"N{n_rows}"
+    else:
+        dim_tag = f"{n_rows}x{n_cols}"
     for r, c, crop in cells:
-        name = f"{frame_id}_N{n}_r{r}_c{c}.png"
+        name = f"{frame_id}_{dim_tag}_r{r}_c{c}.png"
         cv2.imwrite(str(out_dir / name), crop)
     if debug:
         dbg_dir = out_dir.parent / "debug_overlays"
         dbg_dir.mkdir(parents=True, exist_ok=True)
         render_debug(img, res, shrink, dbg_dir / f"{frame_id}_slice.png")
     print(
-        f"{img_path.name}: N={n} -> {len(cells)} cells "
+        f"{img_path.name}: rows={n_rows} cols={n_cols} -> {len(cells)} cells "
         f"(agree={res['agree']}, col_margin={res['col']['margin']:.2f}, "
         f"row_margin={res['row']['margin']:.2f})"
     )
-    return {"frame": frame_id, "n": n, "cells": len(cells), "agree": res["agree"]}
+    return {"frame": frame_id, "n_rows": n_rows, "n_cols": n_cols,
+            "cells": len(cells), "agree": res["agree"]}
 
 
 def main() -> None:
@@ -163,7 +191,11 @@ def main() -> None:
     ap.add_argument("--debug", action="store_true",
                     help="Also write a per-panel overlay showing the inner cell rects.")
     ap.add_argument("--force-n", type=int, default=None,
-                    help="Override the inferred N (e.g. 6 for a 6x6 board the autodetect missed).")
+                    help="Shorthand: force both rows and cols to N (square board).")
+    ap.add_argument("--force-rows", type=int, default=None,
+                    help="Force the row count (overrides autodetect for that axis).")
+    ap.add_argument("--force-cols", type=int, default=None,
+                    help="Force the column count (overrides autodetect for that axis).")
     args = ap.parse_args()
 
     if args.input.is_dir():
@@ -178,7 +210,9 @@ def main() -> None:
     summary = []
     for f in files:
         info = process_one(f, args.out, args.size, args.shrink, args.debug,
-                           force_n=args.force_n)
+                           force_n=args.force_n,
+                           force_rows=args.force_rows,
+                           force_cols=args.force_cols)
         if info:
             total_cells += info["cells"]
             summary.append(info)
@@ -187,9 +221,9 @@ def main() -> None:
     print(f"Wrote {total_cells} cell crops from {len(summary)} panels to {args.out}")
     disagree = [s for s in summary if not s["agree"]]
     if disagree:
-        print(f"WARNING: {len(disagree)} panel(s) had col/row N disagreement; review them:")
+        print(f"NOTE: {len(disagree)} panel(s) had rectangular grids (rows != cols):")
         for s in disagree:
-            print(f"  - {s['frame']} (chose N={s['n']})")
+            print(f"  - {s['frame']} (rows={s['n_rows']} cols={s['n_cols']})")
 
 
 if __name__ == "__main__":

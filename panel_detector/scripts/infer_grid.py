@@ -28,7 +28,7 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-CANDIDATE_NS = list(range(3, 9))  # 3x3 .. 8x8
+CANDIDATE_NS = list(range(3, 11))  # 3..10 cells per axis (rows and cols inferred independently)
 
 
 def build_profiles(gray: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -137,47 +137,67 @@ def comb_score(profile: np.ndarray, n_cells: int) -> tuple[float, float, float]:
 def infer_axis(profile: np.ndarray) -> dict:
     """Infer N for one axis. Returns a dict with diagnostics.
 
-    Step 1: pick N via autocorrelation (unbiased across N).
-    Step 2: for the chosen N (and a couple of neighbors, for diagnostics),
-            fit gridline offset/spacing with a comb sweep so we can
-            actually draw the cells.
+    Picking criterion: ``score = autocorr_score(N) * comb_score(N)``.
+
+    Why the combination:
+      * Autocorrelation alone is unbiased across N but ambiguous on
+        harmonics: a true-N panel produces high autocorr at N as well
+        as 2N, 3N, ... and at N/2, N/3, ... (when those are integers).
+        Empirically that misfires on rectangular panels where one axis
+        is squashed and the half-period peaks survive (e.g. cols=10
+        instead of 5 on s01_0080).
+      * Comb score (mean of detrended profile at fitted gridline
+        positions) discriminates between true N and 2N: at 2N, half the
+        comb teeth fall on cell interiors, dragging the mean down. So
+        multiplying autocorr by comb suppresses the harmonic.
+      * Comb alone is biased toward small N (fewer teeth = more chance
+        to land on bright spots), so we multiply by autocorr instead of
+        using comb on its own.
     """
     p_dt = detrend(profile)
     results = []
     for n in CANDIDATE_NS:
         ac_s = autocorr_score(profile, n)
         comb_s, off, spacing = comb_score(p_dt, n)
+        # Use max(0, ...) so a negative autocorr can't flip the sign of
+        # the product (negative * negative = positive false-positive).
+        ac_clip = max(0.0, ac_s)
+        score = ac_clip * comb_s
         results.append({
             "n": n,
-            "score": ac_s,        # used for picking N
-            "comb_score": comb_s, # used as a sanity check / for offset fit
+            "score": score,
+            "autocorr": ac_s,
+            "comb_score": comb_s,
             "offset": off,
             "spacing": spacing,
         })
     results.sort(key=lambda r: r["score"], reverse=True)
     best = results[0]
-    second = results[1]
-    best["margin"] = best["score"] - second["score"]
+    second_score = results[1]["score"] if len(results) > 1 else -np.inf
+    best["margin"] = best["score"] - second_score
     best["all"] = results
     return best
 
 
 def infer_grid(panel_bgr: np.ndarray) -> dict:
+    """Infer grid dimensions for a (possibly non-square) panel.
+
+    Rows and columns are inferred independently from their respective
+    1-D brightness profiles. The result exposes ``N_cols`` and
+    ``N_rows`` separately. ``N`` is also set for backward compatibility:
+    it equals ``N_rows`` when rows == cols, otherwise it is ``None``.
+    ``agree`` indicates whether rows and cols matched.
+    """
     gray = cv2.cvtColor(panel_bgr, cv2.COLOR_BGR2GRAY)
     col_p, row_p = build_profiles(gray)
     col_res = infer_axis(col_p)
     row_res = infer_axis(row_p)
     n_col, n_row = col_res["n"], row_res["n"]
-    # The board is square, so cols and rows should agree.  If they
-    # disagree, prefer the higher-margin axis.
-    if n_col == n_row:
-        n_final = n_col
-        agree = True
-    else:
-        n_final = col_res["n"] if col_res["margin"] >= row_res["margin"] else row_res["n"]
-        agree = False
+    agree = n_col == n_row
     return {
-        "N": n_final,
+        "N_cols": n_col,
+        "N_rows": n_row,
+        "N": n_col if agree else None,
         "agree": agree,
         "col": col_res,
         "row": row_res,
@@ -203,9 +223,10 @@ def gridline_positions(axis_res: dict, n: int) -> np.ndarray:
 
 
 def render_debug(result: dict, panel_bgr: np.ndarray, out_path: Path) -> None:
-    n = result["N"]
-    xs = gridline_positions(result["col"], n)
-    ys = gridline_positions(result["row"], n)
+    n_cols = result["N_cols"]
+    n_rows = result["N_rows"]
+    xs = gridline_positions(result["col"], n_cols)
+    ys = gridline_positions(result["row"], n_rows)
 
     overlay = panel_bgr.copy()
     h, w = overlay.shape[:2]
@@ -221,7 +242,9 @@ def render_debug(result: dict, panel_bgr: np.ndarray, out_path: Path) -> None:
     axes[0, 0].axis("off")
 
     axes[0, 1].imshow(cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB))
-    axes[0, 1].set_title(f"Inferred N = {n}  (cols={result['col']['n']}, rows={result['row']['n']}, agree={result['agree']})")
+    axes[0, 1].set_title(
+        f"Inferred grid: rows={n_rows}  cols={n_cols}  (agree={result['agree']})"
+    )
     axes[0, 1].axis("off")
 
     col_p = detrend(result["col_profile"])
@@ -262,9 +285,9 @@ def process_one(img_path: Path, out_dir: Path) -> dict:
     out_path = out_dir / (img_path.stem + "_grid.png")
     render_debug(res, img, out_path)
     print(
-        f"{img_path.name}: N={res['N']}  "
-        f"(col={res['col']['n']} margin={res['col']['margin']:.2f}, "
-        f"row={res['row']['n']} margin={res['row']['margin']:.2f}, "
+        f"{img_path.name}: rows={res['N_rows']} cols={res['N_cols']}  "
+        f"(col_margin={res['col']['margin']:.2f}, "
+        f"row_margin={res['row']['margin']:.2f}, "
         f"agree={res['agree']})  -> {out_path.name}"
     )
     return res

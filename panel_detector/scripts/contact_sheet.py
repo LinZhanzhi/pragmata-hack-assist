@@ -30,41 +30,56 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_QUEUE = ROOT / "dataset" / "cells" / "queue"
 DEFAULT_OUT = ROOT / "dataset" / "cells" / "contact"
 
-CELL_RE = re.compile(r"^(?P<frame>.+?)_N(?P<n>\d+)_r(?P<r>\d+)_c(?P<c>\d+)\.png$")
+# Cell filenames look like:
+#   <frame>_N<n>_r<row>_c<col>.png         (square boards, legacy)
+#   <frame>_<rows>x<cols>_r<row>_c<col>.png  (rectangular boards)
+CELL_RE = re.compile(
+    r"^(?P<frame>.+?)_(?:N(?P<n>\d+)|(?P<rows>\d+)x(?P<cols>\d+))"
+    r"_r(?P<r>\d+)_c(?P<c>\d+)\.png$"
+)
 
 
 def list_frames(queue: Path) -> dict[str, dict]:
-    """Group cell PNGs by frame. Returns frame -> {n, cells: {(r,c): path}}."""
+    """Group cell PNGs by frame.
+
+    Returns ``frame -> {n_rows, n_cols, cells: {(r,c): path}}``.
+    """
     frames: dict[str, dict] = {}
     for p in queue.glob("*.png"):
         m = CELL_RE.match(p.name)
         if not m:
             continue
         f = m.group("frame")
-        n = int(m.group("n"))
+        if m.group("n") is not None:
+            n_rows = n_cols = int(m.group("n"))
+        else:
+            n_rows = int(m.group("rows"))
+            n_cols = int(m.group("cols"))
         r = int(m.group("r"))
         c = int(m.group("c"))
-        frames.setdefault(f, {"n": n, "cells": {}})
+        frames.setdefault(f, {"n_rows": n_rows, "n_cols": n_cols, "cells": {}})
         frames[f]["cells"][(r, c)] = p
     return frames
 
 
 def make_sheet(frame: str, info: dict, tile_size: int = 96, gap: int = 6,
                border: int = 2, label_h: int = 18) -> np.ndarray:
-    n = info["n"]
+    n_rows = info["n_rows"]
+    n_cols = info["n_cols"]
     cells = info["cells"]
     cell_box = tile_size + 2 * border
     row_h = cell_box + label_h
-    sheet_w = n * cell_box + (n + 1) * gap
-    sheet_h = n * row_h + (n + 1) * gap + 28  # extra for title
+    sheet_w = n_cols * cell_box + (n_cols + 1) * gap
+    sheet_h = n_rows * row_h + (n_rows + 1) * gap + 28  # extra for title
     sheet = np.full((sheet_h, sheet_w, 3), 255, dtype=np.uint8)
 
-    cv2.putText(sheet, f"{frame}  N={n}  ({len(cells)} cells)",
+    dim_tag = f"N={n_rows}" if n_rows == n_cols else f"{n_rows}x{n_cols}"
+    cv2.putText(sheet, f"{frame}  {dim_tag}  ({len(cells)} cells)",
                 (gap, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 1, cv2.LINE_AA)
 
     y0_start = 28
-    for r in range(n):
-        for c in range(n):
+    for r in range(n_rows):
+        for c in range(n_cols):
             x0 = gap + c * (cell_box + gap)
             y0 = y0_start + gap + r * (row_h + gap)
             # black border
@@ -109,7 +124,10 @@ def main() -> None:
         sheet = make_sheet(f, frames[f], tile_size=args.tile_size)
         out = args.out / f"{f}_contact.png"
         cv2.imwrite(str(out), sheet)
-        print(f"{f}: N={frames[f]['n']}  ->  {out}")
+        info = frames[f]
+        dim_tag = (f"N={info['n_rows']}" if info['n_rows'] == info['n_cols']
+                   else f"{info['n_rows']}x{info['n_cols']}")
+        print(f"{f}: {dim_tag}  ->  {out}")
 
 
 if __name__ == "__main__":
