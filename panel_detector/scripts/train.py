@@ -1,6 +1,9 @@
 """
-Train a YOLO pose model that detects the puzzle panel and its 4 corner
-keypoints (TL, TR, BR, BL).  Single class: `puzzle_panel`.
+Train a YOLO detection model for the puzzle panel.  Single class:
+`puzzle_panel`.  We previously trained a pose model (4 corner keypoints)
+but switched to bbox-only because predict.py reconstructs the corners
+from the bbox via fixed top/bottom edge slopes (more accurate than the
+keypoint head on this dataset).
 
 Usage:
     python scripts/train.py
@@ -16,12 +19,15 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_YAML = ROOT / "data.yaml"
 RUNS_DIR = ROOT / "runs"
 
-# Pose-nano: cheap, perfect for a single object with 4 keypoints.
-BASE_MODEL = "yolov8n-pose.pt"
+# Detect-nano: tiny, fast, plenty for a single class on a fixed UI element.
+BASE_MODEL = "yolov8n.pt"
 
 EPOCHS = 100
 IMG_SIZE = 640
-BATCH = 16
+BATCH = 32
+DEVICE = 0
+WORKERS = 2
+CACHE = "ram"
 
 
 def main() -> None:
@@ -31,6 +37,9 @@ def main() -> None:
         epochs=EPOCHS,
         imgsz=IMG_SIZE,
         batch=BATCH,
+        device=DEVICE,
+        workers=WORKERS,
+        cache=CACHE,
         project=str(RUNS_DIR),
         name="panel_detector",
         exist_ok=True,

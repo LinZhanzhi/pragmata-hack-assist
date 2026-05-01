@@ -1,18 +1,10 @@
-# YOLO pose dataset: detect the puzzle panel + its 4 corner keypoints.
+# YOLO detection dataset: detect the puzzle panel (bbox only).
 # Paths are relative to this file.
 
 path: D:/pathSolver/panel_detector/dataset
 train: images/train
 val: images/val
 test: images/test
-
-# 4 keypoints per panel: top-left, top-right, bottom-right, bottom-left.
-# Each keypoint stored as (x, y, visibility).
-kpt_shape: [4, 3]
-
-# Mirror flip mapping: if the dataset is horizontally flipped, swap
-# TL<->TR and BL<->BR so the keypoint identities stay correct.
-flip_idx: [1, 0, 3, 2]
 
 names:
   0: puzzle_panel
