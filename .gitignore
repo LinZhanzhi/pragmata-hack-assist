@@ -25,6 +25,9 @@ panel_detector/cells_predictions*.json
 
 # Auto-labeler outputs (transient; reviewed in LS then discarded)
 cells_predictions*.json
+panel_detector/cls_disagreements.json
+panel_detector/runs/cell_classifier/
+yolov8n-cls.pt
 
 # LS exports kept at repo root for reference, ignored from git
 project-*-at-*.json
