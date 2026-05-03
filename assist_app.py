@@ -65,8 +65,8 @@ ALPHA, BETA = 5.0, 1.0
 # Closed-loop walker tunables. We track the orange dot in panel space and
 # nudge the mouse one screen-axis at a time. Step is fixed for now; the
 # adaptive variant is preserved below in comments for later experiments.
-WALK_TICK_S = 0.04           # delay between capture/move iterations
-WALK_STEP_PX = 50            # fixed OS-pixel magnitude per nudge
+WALK_TICK_S = 0.0            # delay between capture/move iterations (0 = no sleep, fastest)
+WALK_STEP_PX = 75            # default OS-pixel magnitude per nudge (overridable via --step)
 # WALK_STEP_INIT_PX = 25     # initial OS-pixel magnitude per nudge
 # WALK_STEP_MIN_PX = 4
 # WALK_STEP_MAX_PX = 200
@@ -303,7 +303,7 @@ class Engine:
 
 # --- runtime app -------------------------------------------------------------
 class AssistApp:
-    def __init__(self):
+    def __init__(self, step_px: float = WALK_STEP_PX, tick_s: float = WALK_TICK_S):
         self.engine: Engine | None = None
         self.target_hwnd: int | None = None
         self.target_title: str = ""
@@ -313,6 +313,8 @@ class AssistApp:
         self.busy = False
         self.abort_walk = False
         self.event_q: Queue = Queue()
+        self.step_px = float(step_px)
+        self.tick_s = float(tick_s)
 
     # ---- input listeners ----
     def _on_click(self, x, y, button, pressed):
@@ -444,7 +446,8 @@ class AssistApp:
             # ---- capture + warp to panel ----
             client = capture_window_client(self.target_hwnd)
             if client is None:
-                time.sleep(WALK_TICK_S)
+                if self.tick_s > 0:
+                    time.sleep(self.tick_s)
                 continue
             panel = cv2.warpPerspective(client, M_panel_from_client, (W, H))
 
@@ -452,8 +455,9 @@ class AssistApp:
             cur_cell = find_current_cell(panel, plan.n_rows, plan.n_cols,
                                          exclude=plan.goal)
             if cur_cell is None:
-                # No cyan ring detected -- can't safely move. Wait one tick.
-                time.sleep(WALK_TICK_S)
+                # No cyan ring detected -- can't safely move. Skip this tick.
+                if self.tick_s > 0:
+                    time.sleep(self.tick_s)
                 continue
 
             orange = find_orange_centroid_in_cell(
@@ -498,7 +502,8 @@ class AssistApp:
             # tolerance: if we're inside the target cell already, the
             # cyan-ring re-detection on the next tick will advance us.
             if abs(dx_p) < 1.0 and abs(dy_p) < 1.0:
-                time.sleep(WALK_TICK_S)
+                if self.tick_s > 0:
+                    time.sleep(self.tick_s)
                 continue
 
             # only one panel axis at a time -> one screen axis at a time
@@ -514,8 +519,9 @@ class AssistApp:
             #     no_progress = 0
             #     print(f"[walk] no progress, step -> {step_px:.0f} px")
 
-            move_cursor_rel(sx * WALK_STEP_PX, sy * WALK_STEP_PX)
-            time.sleep(WALK_TICK_S)
+            move_cursor_rel(sx * self.step_px, sy * self.step_px)
+            if self.tick_s > 0:
+                time.sleep(self.tick_s)
 
     # ---- main loop ----
     def run_console(self, hwnd: int, title: str):
@@ -524,6 +530,7 @@ class AssistApp:
         self.engine = Engine()
         self.start_listeners()
         print(f"\n[ready] target window: {title!r} (hwnd={hwnd})")
+        print(f"[walker] step={self.step_px:.0f} px, tick={self.tick_s:.3f} s")
         print("Hold RIGHT MOUSE + MOUSE 4, then tap T to trigger.")
         print("ESC or releasing RMB/M4 aborts the active walk. Ctrl+C to quit.")
         try:
@@ -598,6 +605,10 @@ def main():
                     help="Skip the window picker; use this raw HWND.")
     ap.add_argument("--list", action="store_true",
                     help="List visible windows and exit.")
+    ap.add_argument("--step", type=float, default=WALK_STEP_PX,
+                    help=f"OS-pixel magnitude per mouse nudge (default {WALK_STEP_PX}).")
+    ap.add_argument("--tick", type=float, default=WALK_TICK_S,
+                    help="Sleep seconds between ticks; 0 = fastest (default 0).")
     args = ap.parse_args()
 
     if args.list:
@@ -615,7 +626,7 @@ def main():
             return
         hwnd, title = picked
 
-    AssistApp().run_console(hwnd, title)
+    AssistApp(step_px=args.step, tick_s=args.tick).run_console(hwnd, title)
 
 
 if __name__ == "__main__":
