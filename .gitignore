@@ -27,6 +27,9 @@ panel_detector/cells_predictions*.json
 cells_predictions*.json
 panel_detector/cls_disagreements.json
 panel_detector/runs/cell_classifier/
+panel_detector/runs/current_check/
+panel_detector/runs/path_demo/
+panel_detector/runs/live/
 yolov8n-cls.pt
 
 # LS exports kept at repo root for reference, ignored from git

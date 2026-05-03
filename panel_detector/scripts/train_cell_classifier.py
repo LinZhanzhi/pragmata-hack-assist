@@ -123,17 +123,25 @@ class SmallCNN(nn.Module):
 
 class CellDataset(Dataset):
     def __init__(self, root: Path, classes: list[str], augment: bool):
-        self.samples = []
         self.classes = classes
         self.cls_to_idx = {c: i for i, c in enumerate(classes)}
+        # Preload all images into RAM as resized PIL images.
+        paths_labels = []
         for c in classes:
             for p in (root / c).iterdir():
                 if p.suffix.lower() == ".png":
-                    self.samples.append((p, self.cls_to_idx[c]))
+                    paths_labels.append((p, self.cls_to_idx[c]))
+        resize = transforms.Resize((IMG_SIZE, IMG_SIZE))
+        self.images: list = []
+        labels: list[int] = []
+        for p, y in paths_labels:
+            self.images.append(resize(Image.open(p).convert("RGB")).copy())
+            labels.append(y)
+        self.labels = labels
+        self.samples = [(None, y) for y in labels]  # for Counter compat
         norm = transforms.Normalize([0.5] * 3, [0.5] * 3)
         if augment:
             self.tf = transforms.Compose([
-                transforms.Resize((IMG_SIZE, IMG_SIZE)),
                 transforms.RandomHorizontalFlip(),
                 transforms.ColorJitter(0.1, 0.1, 0.1),
                 transforms.ToTensor(),
@@ -141,17 +149,15 @@ class CellDataset(Dataset):
             ])
         else:
             self.tf = transforms.Compose([
-                transforms.Resize((IMG_SIZE, IMG_SIZE)),
                 transforms.ToTensor(),
                 norm,
             ])
 
     def __len__(self):
-        return len(self.samples)
+        return len(self.labels)
 
     def __getitem__(self, i):
-        p, y = self.samples[i]
-        return self.tf(Image.open(p).convert("RGB")), y
+        return self.tf(self.images[i]), self.labels[i]
 
 
 def train_model(epochs: int, device: str) -> tuple[Path, list[str]]:
