@@ -83,6 +83,45 @@ def detect_orange_current(bgr: np.ndarray) -> dict | None:
                 center=(x + w / 2, y + h / 2), ready=ready)
 
 
+def find_orange_centroid_in_cell(
+    bgr: np.ndarray,
+    cell: tuple[int, int],
+    n_rows: int,
+    n_cols: int,
+) -> tuple[float, float] | None:
+    """Return (x, y) panel-pixel centroid of the orange dot, restricted to
+    the bounding box of ``cell``.
+
+    The orange disc is the precise visual cursor position in the panel; the
+    cyan ring identifies which cell it's *in* but only at cell granularity.
+    By gating the orange search to the cyan-ring cell we get a robust,
+    sub-cell position estimate (and reject the bright red "warning" icons
+    elsewhere on the panel).
+    """
+    H, W = bgr.shape[:2]
+    cw = W / n_cols
+    ch = H / n_rows
+    r, c = cell
+    # Slightly inflate the cell rect so a dot near the border is not clipped.
+    pad = max(2, int(round(min(cw, ch) * 0.10)))
+    x0 = max(0, int(round(c * cw)) - pad)
+    y0 = max(0, int(round(r * ch)) - pad)
+    x1 = min(W, int(round((c + 1) * cw)) + pad)
+    y1 = min(H, int(round((r + 1) * ch)) + pad)
+    sub = bgr[y0:y1, x0:x1]
+    if sub.size == 0:
+        return None
+    m = _orange_mask(sub)
+    n, _, stats, cents = cv2.connectedComponentsWithStats(m, connectivity=8)
+    if n <= 1:
+        return None
+    best = max(range(1, n), key=lambda i: stats[i, cv2.CC_STAT_AREA])
+    if int(stats[best, cv2.CC_STAT_AREA]) < MIN_AREA:
+        return None
+    cx, cy = cents[best]
+    return float(x0 + cx), float(y0 + cy)
+
+
 def find_current_cell(
     bgr: np.ndarray,
     n_rows: int,

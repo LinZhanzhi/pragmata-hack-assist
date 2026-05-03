@@ -43,7 +43,10 @@ from torchvision import transforms
 ROOT = Path(__file__).resolve().parent
 PD = ROOT / "panel_detector"
 sys.path.insert(0, str(PD / "scripts"))
-from current_detector import find_current_cell  # noqa: E402
+from current_detector import (  # noqa: E402
+    find_current_cell,
+    find_orange_centroid_in_cell,
+)
 from dest_detector import infer_grid_from_dest  # noqa: E402
 from path_demo import (  # noqa: E402
     DEST_CLASSES, FORBIDDEN_CLASSES, NORMAL_CLASSES, draw_overlay, solve,
@@ -59,15 +62,16 @@ LIVE_DIR = PD / "runs" / "live"
 LIVE_DIR.mkdir(parents=True, exist_ok=True)
 
 ALPHA, BETA = 5.0, 1.0
-# Closed-loop walker tunables. The game's mouse sensitivity is unknown, so
-# we don't try to be clever: pick a starting OS-pixel step, increase if no
-# progress, halve on overshoot, give up after a budget per cell.
+# Closed-loop walker tunables. We track the orange dot in panel space and
+# nudge the mouse one screen-axis at a time. Step is fixed for now; the
+# adaptive variant is preserved below in comments for later experiments.
 WALK_TICK_S = 0.04           # delay between capture/move iterations
-WALK_STEP_INIT_PX = 25       # initial OS-pixel magnitude per nudge
-WALK_STEP_MIN_PX = 4
-WALK_STEP_MAX_PX = 200
-WALK_NO_PROGRESS_GROW = 6    # iterations w/ no cell change before growing step
-WALK_MAX_TICKS_PER_HOP = 200 # ~8s per cell at 40ms tick
+WALK_STEP_PX = 50            # fixed OS-pixel magnitude per nudge
+# WALK_STEP_INIT_PX = 25     # initial OS-pixel magnitude per nudge
+# WALK_STEP_MIN_PX = 4
+# WALK_STEP_MAX_PX = 200
+# WALK_NO_PROGRESS_GROW = 6  # iterations w/ no cell change before growing step
+WALK_MAX_TICKS_PER_HOP = 400 # ~16s per cell at 40ms tick
 
 
 # --- Win32 helpers -----------------------------------------------------------
@@ -371,33 +375,59 @@ class AssistApp:
     def walk_path(self, plan: PlanResult):
         """Closed-loop walker.
 
-        Re-detects the current cyan ring every tick and nudges the mouse
-        in the screen-space direction toward the next path cell. Adapts
-        step magnitude based on whether the detected cell is changing.
-        Aborts on ESC, on RMB or M4 release, on a hop budget overrun, or
-        when the goal is reached.
+        Per tick we re-capture and warp the game window, find the cyan-ring
+        cell (= which cell the cursor is in) and the orange-dot centroid
+        inside that cell (= precise sub-cell position). Then:
+          - if current cell is on the planned path, target = next path cell
+            after it; if it's the last one, we're done.
+          - if current cell is OFF-path (overshoot or drift), target = the
+            nearest cell on the path so we recover before continuing.
+        Direction: we compare the orange dot's panel-pixel position to the
+        target cell's center in panel space, pick the axis with the larger
+        remaining delta, map that single panel axis to a screen axis via
+        M_inv (sign of dominant component), and nudge a fixed 50 px in
+        that one screen axis. Only horizontal OR vertical mouse motion --
+        never diagonal.
+        Aborts on ESC, on RMB or M4 release, on a hop budget overrun.
         """
         path = plan.path
         if not path or len(path) < 2:
             print("[walk] nothing to walk")
             return
 
-        # Precompute screen-space vectors for each (a -> b) hop. The relative
-        # mouse delta needed in OS pixels is unknown (sensitivity), but the
-        # *direction* on screen is well-defined by the panel homography.
-        def panel_to_client(pcx, pcy):
-            v = plan.M_inv @ np.array([pcx, pcy, 1.0])
-            return v[0] / v[2], v[1] / v[2]
+        path_set = {cell: i for i, cell in enumerate(path)}
+        H = plan.panel_bgr.shape[0]
+        W = plan.panel_bgr.shape[1]
+        M_panel_from_client = np.linalg.inv(plan.M_inv)
 
-        # Current target index (in `path`); we are moving toward path[idx].
-        idx = 1
-        step_px = float(WALK_STEP_INIT_PX)
+        def panel_axis_to_screen_axis(dxp: float, dyp: float) -> tuple[float, float]:
+            """Map a panel-space direction (dxp, dyp) to a single screen
+            axis (sx, sy) where exactly one of sx/sy is +/-1 and the other
+            is 0. We sample two panel points 100 px apart along the chosen
+            panel axis, project both to client/screen via M_inv, then snap
+            the resulting screen vector to its dominant component.
+            """
+            origin_p = np.array([W * 0.5, H * 0.5, 1.0])
+            tip_p = np.array([W * 0.5 + dxp * 100.0,
+                              H * 0.5 + dyp * 100.0, 1.0])
+            o = plan.M_inv @ origin_p
+            t = plan.M_inv @ tip_p
+            o /= o[2]
+            t /= t[2]
+            sx_raw = float(t[0] - o[0])
+            sy_raw = float(t[1] - o[1])
+            if abs(sx_raw) >= abs(sy_raw):
+                return (1.0 if sx_raw > 0 else -1.0, 0.0)
+            return (0.0, 1.0 if sy_raw > 0 else -1.0)
+
         last_cell = path[0]
-        no_progress = 0
         ticks_in_hop = 0
+        last_target = None
         t_start = time.time()
+        # step_px = float(WALK_STEP_INIT_PX)   # adaptive variant (disabled)
+        # no_progress = 0
 
-        while idx < len(path):
+        while True:
             # ---- abort conditions ----
             if self.abort_walk:
                 print("[walk] aborted (ESC)")
@@ -406,97 +436,86 @@ class AssistApp:
                 print("[walk] aborted (trigger keys released)")
                 return
 
-            target = path[idx]
             ticks_in_hop += 1
             if ticks_in_hop > WALK_MAX_TICKS_PER_HOP:
-                print(f"[walk] hop budget exceeded at target {target}; giving up")
+                print(f"[walk] hop budget exceeded; giving up")
                 return
 
-            # ---- capture + detect ----
+            # ---- capture + warp to panel ----
             client = capture_window_client(self.target_hwnd)
             if client is None:
                 time.sleep(WALK_TICK_S)
                 continue
-            panel = cv2.warpPerspective(
-                client, np.linalg.inv(plan.M_inv),
-                (plan.panel_bgr.shape[1], plan.panel_bgr.shape[0]))
-            cur = find_current_cell(panel, plan.n_rows, plan.n_cols,
-                                    exclude=plan.goal)
+            panel = cv2.warpPerspective(client, M_panel_from_client, (W, H))
 
-            # ---- progress logic ----
-            if cur is not None and cur != last_cell:
-                no_progress = 0
-                last_cell = cur
-                # Snap step back down on every successful cell transition;
-                # this prevents runaway acceleration once we're in motion.
-                step_px = max(WALK_STEP_MIN_PX, step_px * 0.5)
-                print(f"[walk] now at {cur} (target {target}, idx {idx}/"
-                      f"{len(path) - 1})")
-
-            # If the detected cell jumped *past* the immediate target, fast
-            # forward through any path cells we already crossed.
-            if cur is not None:
-                while idx < len(path) and cur == path[idx]:
-                    idx += 1
-                    ticks_in_hop = 0
-                    no_progress = 0
-                    if idx >= len(path):
-                        break
-                if idx >= len(path):
-                    break
-                target = path[idx]
-                # Also fast-forward if cur appears later in the path (we
-                # overshot one or more cells).
-                for j in range(idx + 1, len(path)):
-                    if cur == path[j]:
-                        idx = j + 1
-                        ticks_in_hop = 0
-                        no_progress = 0
-                        break
-                if idx >= len(path):
-                    break
-                target = path[idx]
-
-            # ---- compute screen-direction toward target ----
-            cur_for_dir = cur if cur is not None else last_cell
-            ar, ac = cur_for_dir
-            br, bc = target
-            # Centers in panel pixel space.
-            apx = (ac + 0.5) * plan.cell_w
-            apy = (ar + 0.5) * plan.cell_h
-            bpx = (bc + 0.5) * plan.cell_w
-            bpy = (br + 0.5) * plan.cell_h
-            ax, ay = panel_to_client(apx, apy)
-            bx, by = panel_to_client(bpx, bpy)
-            vx, vy = bx - ax, by - ay
-            length = (vx * vx + vy * vy) ** 0.5
-            if length < 1e-3:
+            # ---- detect current cell + orange dot ----
+            cur_cell = find_current_cell(panel, plan.n_rows, plan.n_cols,
+                                         exclude=plan.goal)
+            if cur_cell is None:
+                # No cyan ring detected -- can't safely move. Wait one tick.
                 time.sleep(WALK_TICK_S)
                 continue
-            vx /= length
-            vy /= length
 
-            # ---- adaptive step ----
-            no_progress += 1
-            if no_progress >= WALK_NO_PROGRESS_GROW:
-                step_px = min(WALK_STEP_MAX_PX, step_px * 1.5)
-                no_progress = 0
-                print(f"[walk] no progress, step -> {step_px:.0f} px")
-
-            # If we have a lock on cur != target, also dampen perpendicular
-            # error: only nudge along the cell-grid axis with the larger
-            # delta to avoid diagonal drift inside a cell.
-            if abs(br - ar) > abs(bc - ac):
-                vx = 0.0
-                vy = 1.0 if br > ar else -1.0
+            orange = find_orange_centroid_in_cell(
+                panel, cur_cell, plan.n_rows, plan.n_cols)
+            if orange is not None:
+                cur_px, cur_py = orange
             else:
-                vy = 0.0
-                vx = 1.0 if bc > ac else -1.0
+                cur_px = (cur_cell[1] + 0.5) * plan.cell_w
+                cur_py = (cur_cell[0] + 0.5) * plan.cell_h
 
-            move_cursor_rel(vx * step_px, vy * step_px)
+            # ---- pick target cell ----
+            on_path = cur_cell in path_set
+            if on_path:
+                cur_idx = path_set[cur_cell]
+                if cur_idx >= len(path) - 1:
+                    print(f"[walk] reached goal in "
+                          f"{time.time() - t_start:.2f}s")
+                    return
+                target = path[cur_idx + 1]
+            else:
+                # nearest path cell (Manhattan)
+                target = min(path, key=lambda p: abs(p[0] - cur_cell[0])
+                             + abs(p[1] - cur_cell[1]))
+
+            if cur_cell != last_cell:
+                # step_px = max(WALK_STEP_MIN_PX, step_px * 0.5)  # adaptive
+                # no_progress = 0
+                last_cell = cur_cell
+                tag = "on-path" if on_path else "OFF-path -> recovering"
+                print(f"[walk] now at {cur_cell} ({tag}, target {target})")
+
+            if target != last_target:
+                ticks_in_hop = 0
+                last_target = target
+
+            # ---- panel-space direction toward target center ----
+            tgt_px = (target[1] + 0.5) * plan.cell_w
+            tgt_py = (target[0] + 0.5) * plan.cell_h
+            dx_p = tgt_px - cur_px
+            dy_p = tgt_py - cur_py
+
+            # tolerance: if we're inside the target cell already, the
+            # cyan-ring re-detection on the next tick will advance us.
+            if abs(dx_p) < 1.0 and abs(dy_p) < 1.0:
+                time.sleep(WALK_TICK_S)
+                continue
+
+            # only one panel axis at a time -> one screen axis at a time
+            if abs(dx_p) >= abs(dy_p):
+                sx, sy = panel_axis_to_screen_axis(1.0 if dx_p > 0 else -1.0, 0.0)
+            else:
+                sx, sy = panel_axis_to_screen_axis(0.0, 1.0 if dy_p > 0 else -1.0)
+
+            # adaptive step (disabled):
+            # no_progress += 1
+            # if no_progress >= WALK_NO_PROGRESS_GROW:
+            #     step_px = min(WALK_STEP_MAX_PX, step_px * 1.5)
+            #     no_progress = 0
+            #     print(f"[walk] no progress, step -> {step_px:.0f} px")
+
+            move_cursor_rel(sx * WALK_STEP_PX, sy * WALK_STEP_PX)
             time.sleep(WALK_TICK_S)
-
-        print(f"[walk] reached goal in {time.time() - t_start:.2f}s")
 
     # ---- main loop ----
     def run_console(self, hwnd: int, title: str):
