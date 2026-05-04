@@ -495,15 +495,27 @@ class AssistApp:
         # consecutive ticks on an axis, double the step until something
         # moves (handles low in-game sensitivity / mouse dead zone).
         STAGNATION_TICKS = 3
+        # If we keep probing without observed motion for this many
+        # additional ticks, the dot is most likely pinned against a panel
+        # edge because the screen->panel sign for this axis is inverted
+        # by the game's camera coupling. Flip the axis sign and reset.
+        FLIP_AFTER_PROBES = 2
         # Hard sanity bounds on per-update observations of OS_px / panel_px;
         # protects the EMA from a single huge or tiny outlier.
         GAIN_OBS_MIN, GAIN_OBS_MAX = 0.3, 5.0
+        # Per-screen-axis sign multiplier. Pragmata couples the mouse to
+        # the in-panel cursor through a camera/aim transform whose sign
+        # may be inverted relative to the M_inv-derived geometric sign.
+        # We start at +1 and learn a flip from observed motion.
+        axis_sign = {"h": 1.0, "v": 1.0}
         last_sent = {"h": 0.0, "v": 0.0}
         last_axis: str | None = None
+        last_intended_panel_dir = 0.0   # +1 / -1 panel direction we wanted last tick
         last_was_probe = False
         last_panel_pos: tuple[float, float] | None = None
         last_cell_idx: tuple[int, int] | None = path[0]
         stagnation = 0
+        probes_no_motion = 0
 
         while True:
             # ---- abort conditions ----
@@ -561,17 +573,27 @@ class AssistApp:
                 and cells_jumped <= 1
             ):
                 if last_axis == "h":
-                    panel_dir = (1.0 if last_sent["h"] > 0 else -1.0)
-                    observed = (cur_px - last_panel_pos[0]) * panel_dir
+                    raw_motion = (cur_px - last_panel_pos[0])
                 else:
-                    panel_dir = (1.0 if last_sent["v"] > 0 else -1.0)
-                    observed = (cur_py - last_panel_pos[1]) * panel_dir
+                    raw_motion = (cur_py - last_panel_pos[1])
+                # Project observed motion onto INTENDED panel direction.
+                observed = raw_motion * last_intended_panel_dir
                 if observed > 1.0:
                     g_obs = abs(last_sent[last_axis]) / observed
                     g_obs = float(np.clip(g_obs, GAIN_OBS_MIN, GAIN_OBS_MAX))
                     gain[last_axis] = 0.7 * gain[last_axis] + 0.3 * g_obs
                     gain[last_axis] = float(np.clip(gain[last_axis], 0.2, 5.0))
                     stagnation = 0
+                    probes_no_motion = 0
+                elif observed < -3.0:
+                    # Clear motion in the OPPOSITE direction -> the
+                    # screen->panel sign for this axis is inverted.
+                    axis_sign[last_axis] *= -1.0
+                    print(f"[walk] axis flip on {last_axis} "
+                          f"(observed reversed motion); sign now "
+                          f"{int(axis_sign[last_axis])}")
+                    stagnation = 0
+                    probes_no_motion = 0
                 else:
                     stagnation += 1
 
@@ -648,26 +670,35 @@ class AssistApp:
                 os_step = abs(err) * gain[scr_axis]
                 mag = float(np.clip(os_step, STEP_MIN_PX, STEP_MAX_PX))
 
-            # Stagnation: probably in the game's mouse-input dead zone.
-            # Push harder. Doubles each STAGNATION_TICKS ticks until we
-            # observe motion. Mark this as a probe so the gain update on
-            # the next iteration ignores it.
+            # Stagnation: probably in the game's mouse-input dead zone OR
+            # we're pushing into a panel edge with the wrong sign. Push
+            # harder; if even probes don't produce motion, flip the axis
+            # sign on the assumption the controls are inverted.
             is_probe = False
             if stagnation >= STAGNATION_TICKS:
                 mag = min(STEP_MAX_PX * 4.0, mag * 2.0)
                 is_probe = True
                 if stagnation == STAGNATION_TICKS:
                     print(f"[walk] stagnation -> probing {mag:.0f} OS px on {scr_axis}")
+                if probes_no_motion >= FLIP_AFTER_PROBES:
+                    axis_sign[scr_axis] *= -1.0
+                    print(f"[walk] no progress after probes; flipping {scr_axis} "
+                          f"sign to {int(axis_sign[scr_axis])}")
+                    stagnation = 0
+                    probes_no_motion = 0
+                else:
+                    probes_no_motion += 1
 
-            # panel_axis_to_screen_axis already returned the (sx, sy)
-            # whose sign drives `err` toward zero, so just scale by mag.
-            os_dx = sx * mag
-            os_dy = sy * mag
+            # Apply the learned per-axis sign.
+            sign_mul = axis_sign[scr_axis]
+            os_dx = sx * mag * sign_mul
+            os_dy = sy * mag * sign_mul
 
             move_cursor_rel(os_dx, os_dy)
             last_sent = {"h": 0.0, "v": 0.0}
             last_sent[scr_axis] = os_dx if scr_axis == "h" else os_dy
             last_axis = scr_axis
+            last_intended_panel_dir = 1.0 if err > 0 else -1.0
             last_panel_pos = (cur_px, cur_py)
             last_cell_idx = cur_cell
             last_was_probe = is_probe
