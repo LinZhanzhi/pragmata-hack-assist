@@ -67,8 +67,11 @@ ALPHA, BETA = 5.0, 1.0
 # Closed-loop walker tunables. We track the orange dot in panel space and
 # nudge the mouse one screen-axis at a time. Step is fixed for now; the
 # adaptive variant is preserved below in comments for later experiments.
-WALK_TICK_S = 0.0            # delay between capture/move iterations (0 = no sleep, fastest)
+WALK_TICK_S = 0.033          # post-move settle (~2 frames @ 60 FPS) so the
+                              # captured frame reflects the input we just sent
 WALK_STEP_PX = 120           # default OS-pixel UPPER BOUND per nudge (overridable via --step)
+WALK_DAMPING = 0.85          # scale J_inv@err by this so calibration error
+                              # doesn't translate into overshoot ping-pong
 # WALK_STEP_INIT_PX = 25     # initial OS-pixel magnitude per nudge
 # WALK_STEP_MIN_PX = 4
 # WALK_STEP_MAX_PX = 200
@@ -438,7 +441,10 @@ class AssistApp:
         panel_px / OS_px. Returns None if the probes can't be observed.
         """
         PROBE_OS = 80.0
-        SETTLE = 0.06
+        # Settle longer than steady-state ticks: the very first probe
+        # also has to wait for the capture pipeline to reflect the move.
+        # Pragmata at 60 FPS needs at least ~33 ms; we double that.
+        SETTLE = 0.07
 
         def measure(retries=3):
             for _ in range(retries):
@@ -603,7 +609,10 @@ class AssistApp:
             err_panel = np.array([tgt_px - cur_px, tgt_py - cur_py])
 
             # Convert panel-pixel error to OS-pixel mouse delta.
-            os_delta = J_inv @ err_panel
+            # Damping (<1) absorbs small calibration error and prevents
+            # the overshoot/correct/overshoot oscillation that looked
+            # like "infinite flipping".
+            os_delta = WALK_DAMPING * (J_inv @ err_panel)
             mag = float(np.linalg.norm(os_delta))
             if mag < 1.0:
                 # Already at target in OS terms; let the cyan ring catch up.
@@ -612,8 +621,14 @@ class AssistApp:
                 continue
             if mag > STEP_MAX:
                 os_delta = os_delta * (STEP_MAX / mag)
+                mag = STEP_MAX
 
+            # MOVE -> SETTLE -> (next iter captures fresh frame).
             move_cursor_rel(float(os_delta[0]), float(os_delta[1]))
+            if self.debug:
+                print(f"[walk] err=({err_panel[0]:+.0f},{err_panel[1]:+.0f}) px "
+                      f"-> os=({os_delta[0]:+.0f},{os_delta[1]:+.0f}) "
+                      f"mag={mag:.0f}")
 
             if TICK > 0:
                 time.sleep(TICK)
