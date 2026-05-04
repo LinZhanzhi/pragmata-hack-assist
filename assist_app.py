@@ -44,6 +44,7 @@ ROOT = Path(__file__).resolve().parent
 PD = ROOT / "panel_detector"
 sys.path.insert(0, str(PD / "scripts"))
 from current_detector import (  # noqa: E402
+    detect_orange_current,
     find_current_cell,
     find_orange_centroid_in_cell,
 )
@@ -416,23 +417,95 @@ class AssistApp:
         finally:
             self.busy = False
 
-    def walk_path(self, plan: PlanResult):
-        """Closed-loop walker.
+    def _measure_orange_panel(self, M_panel_from_client, W, H):
+        """Capture the game window and return the orange-dot centroid in
+        panel pixels, or None. Searches the WHOLE panel (not gated to a
+        cell) so it works during calibration when the cyan ring may lag.
+        """
+        client = capture_window_client(self.target_hwnd)
+        if client is None:
+            return None
+        panel = cv2.warpPerspective(client, M_panel_from_client, (W, H))
+        info = detect_orange_current(panel)
+        if info is None:
+            return None
+        return float(info["center"][0]), float(info["center"][1])
 
-        Per tick we re-capture and warp the game window, find the cyan-ring
-        cell (= which cell the cursor is in) and the orange-dot centroid
-        inside that cell (= precise sub-cell position). Then:
-          - if current cell is on the planned path, target = next path cell
-            after it; if it's the last one, we're done.
-          - if current cell is OFF-path (overshoot or drift), target = the
-            nearest cell on the path so we recover before continuing.
-        Direction: we compare the orange dot's panel-pixel position to the
-        target cell's center in panel space, pick the axis with the larger
-        remaining delta, map that single panel axis to a screen axis via
-        M_inv (sign of dominant component), and nudge a fixed 50 px in
-        that one screen axis. Only horizontal OR vertical mouse motion --
-        never diagonal.
-        Aborts on ESC, on RMB or M4 release, on a hop budget overrun.
+    def _calibrate_jacobian(self, M_panel_from_client, W, H):
+        """Probe the mouse on screen-X and screen-Y; measure how the
+        orange dot moves in panel pixels; return the 2x2 Jacobian
+        ``J`` such that  panel_delta = J @ os_delta, with units
+        panel_px / OS_px. Returns None if the probes can't be observed.
+        """
+        PROBE_OS = 80.0
+        SETTLE = 0.06
+
+        def measure(retries=3):
+            for _ in range(retries):
+                p = self._measure_orange_panel(M_panel_from_client, W, H)
+                if p is not None:
+                    return p
+                time.sleep(0.02)
+            return None
+
+        p0 = measure()
+        if p0 is None:
+            print("[cal] could not see orange dot at start of probe")
+            return None
+
+        move_cursor_rel(PROBE_OS, 0.0)
+        time.sleep(SETTLE)
+        p1 = measure()
+        move_cursor_rel(-PROBE_OS, 0.0)   # return to ~start
+        time.sleep(SETTLE)
+        if p1 is None:
+            print("[cal] lost orange dot after +X probe")
+            return None
+
+        p_mid = measure()
+        if p_mid is None:
+            p_mid = p0  # fallback
+
+        move_cursor_rel(0.0, PROBE_OS)
+        time.sleep(SETTLE)
+        p2 = measure()
+        move_cursor_rel(0.0, -PROBE_OS)
+        time.sleep(SETTLE)
+        if p2 is None:
+            print("[cal] lost orange dot after +Y probe")
+            return None
+
+        # Columns of J: panel response per OS unit on each screen axis.
+        col_x = ((p1[0] - p0[0]) / PROBE_OS, (p1[1] - p0[1]) / PROBE_OS)
+        col_y = ((p2[0] - p_mid[0]) / PROBE_OS, (p2[1] - p_mid[1]) / PROBE_OS)
+        J = np.array([[col_x[0], col_y[0]],
+                      [col_x[1], col_y[1]]], dtype=np.float64)
+
+        # Sanity: each column needs nontrivial magnitude (the game
+        # actually responded). If a column is near zero, calibration is
+        # garbage -- the game ate the input or the dot didn't move.
+        if (np.linalg.norm(col_x) < 0.05) or (np.linalg.norm(col_y) < 0.05):
+            print(f"[cal] probe response too small: J=\n{J}")
+            return None
+        if abs(np.linalg.det(J)) < 1e-4:
+            print(f"[cal] near-singular J:\n{J}")
+            return None
+        return J
+
+    def walk_path(self, plan: PlanResult):
+        """Calibrate-then-drive walker.
+
+        Step 1 (once per trigger): send two small mouse probes on screen
+        +X and +Y, measure the resulting panel-pixel motion of the orange
+        dot, build a 2x2 Jacobian ``J`` (panel_px per OS_px). This single
+        measurement captures everything specific to the current panel:
+        cell size, perspective, AND the game's mouse-to-cursor sign /
+        sensitivity coupling.
+
+        Step 2 (per tick): error in panel pixels to the target cell
+        center, multiplied by ``J^-1``, gives the OS mouse delta to send.
+        Magnitude is capped at ``--step``. As soon as the cyan ring
+        reaches the target cell we advance to the next path step.
         """
         path = plan.path
         if not path or len(path) < 2:
@@ -444,86 +517,26 @@ class AssistApp:
         W = plan.panel_bgr.shape[1]
         M_panel_from_client = np.linalg.inv(plan.M_inv)
 
-        def panel_axis_to_screen_axis(dxp: float, dyp: float) -> tuple[float, float]:
-            """Map a panel-space direction (dxp, dyp) to a single screen
-            axis (sx, sy) where exactly one of sx/sy is +/-1 and the other
-            is 0. We sample two panel points 100 px apart along the chosen
-            panel axis, project both to client/screen via M_inv, then snap
-            the resulting screen vector to its dominant component.
-            """
-            origin_p = np.array([W * 0.5, H * 0.5, 1.0])
-            tip_p = np.array([W * 0.5 + dxp * 100.0,
-                              H * 0.5 + dyp * 100.0, 1.0])
-            o = plan.M_inv @ origin_p
-            t = plan.M_inv @ tip_p
-            o /= o[2]
-            t /= t[2]
-            sx_raw = float(t[0] - o[0])
-            sy_raw = float(t[1] - o[1])
-            if abs(sx_raw) >= abs(sy_raw):
-                return (1.0 if sx_raw > 0 else -1.0, 0.0)
-            return (0.0, 1.0 if sy_raw > 0 else -1.0)
+        # ---- 1. calibrate ----
+        print("[walk] calibrating mouse->panel mapping...")
+        J = self._calibrate_jacobian(M_panel_from_client, W, H)
+        if J is None:
+            print("[walk] calibration failed; aborting walk")
+            return
+        J_inv = np.linalg.inv(J)
+        print(f"[walk] J (panel_px / OS_px):\n"
+              f"       [[{J[0,0]:+.3f} {J[0,1]:+.3f}]\n"
+              f"        [{J[1,0]:+.3f} {J[1,1]:+.3f}]]")
 
-        last_cell = path[0]
-        ticks_in_hop = 0
-        last_target = None
+        # ---- 2. drive ----
+        STEP_MAX = max(40.0, self.step_px)
+        TICK = self.tick_s
         t_start = time.time()
-
-        # ----- closed-loop proportional controller state -----
-        # gain[a] = OS pixels we need to send along screen axis `a` to move
-        # the orange dot ONE pixel in panel space along the panel axis that
-        # this screen axis maps to. Starts as a guess: assume the user's
-        # current --step value moves the dot by ~ half the smaller cell
-        # dimension. Updated online from observed motion / sent OS pixels.
-        cell_min = max(8.0, min(plan.cell_w, plan.cell_h))
-        gain_init = max(0.5, self.step_px / max(cell_min * 0.5, 1.0))
-        gain = {"h": gain_init, "v": gain_init}
-        # MIN clamp: must clear the game's raw-input dead zone -- below
-        # this we observe zero motion and the controller stalls. MAX clamp
-        # is the user's --step.
-        STEP_MIN_PX = 30.0
-        STEP_MAX_PX = max(40.0, self.step_px)
-        # When error is at least one full cell away on the active axis,
-        # bypass the proportional law and send STEP_MAX directly. This
-        # eliminates the slow ramp-down to a tiny nudge during long hops.
-        OVERDRIVE_CELL_FRAC = 1.0
-        # Dead-band: stop nudging an axis once the orange dot is within
-        # this fraction of cell_size from the target center. The cyan
-        # ring transition advances the target on the next tick.
-        TOL_FRAC = 0.15
-        # Stagnation watchdog: if no panel-pixel progress for this many
-        # consecutive ticks on an axis, double the step until something
-        # moves (handles low in-game sensitivity / mouse dead zone).
-        STAGNATION_TICKS = 3
-        # If we keep probing without observed motion for this many
-        # additional ticks, the dot is most likely pinned against a panel
-        # edge because the screen->panel sign for this axis is inverted
-        # by the game's camera coupling. Flip the axis sign and reset.
-        FLIP_AFTER_PROBES = 2
-        # Hard sanity bounds on per-update observations of OS_px / panel_px;
-        # protects the EMA from a single huge or tiny outlier.
-        GAIN_OBS_MIN, GAIN_OBS_MAX = 0.3, 5.0
-        # Per-screen-axis sign multiplier. Pragmata couples the mouse to
-        # the in-panel cursor through a camera/aim transform whose sign
-        # may be inverted relative to the M_inv-derived geometric sign.
-        # We start at +1 and learn a flip from observed motion.
-        axis_sign = {"h": 1.0, "v": 1.0}
-        # Once an axis sign has been confirmed by observed reversed motion,
-        # we lock it to prevent the no-motion-probe heuristic from
-        # un-flipping it when the dot ends up pinned against a panel edge.
-        axis_locked = {"h": False, "v": False}
-        last_sent = {"h": 0.0, "v": 0.0}
-        last_axis: str | None = None
-        last_intended_panel_dir = 0.0   # +1 / -1 panel direction we wanted last tick
-        last_orange_found = False       # was orange ACTUALLY detected last tick?
-        last_was_probe = False
-        last_panel_pos: tuple[float, float] | None = None
-        last_cell_idx: tuple[int, int] | None = path[0]
-        stagnation = 0
-        probes_no_motion = 0
+        last_cell_logged = path[0]
+        last_target = None
+        ticks_in_hop = 0
 
         while True:
-            # ---- abort conditions ----
             if self.abort_walk:
                 print("[walk] aborted (ESC)")
                 return
@@ -536,80 +549,34 @@ class AssistApp:
                 print(f"[walk] hop budget exceeded; giving up")
                 return
 
-            # ---- capture + warp to panel ----
             client = capture_window_client(self.target_hwnd)
             if client is None:
-                if self.tick_s > 0:
-                    time.sleep(self.tick_s)
+                if TICK > 0:
+                    time.sleep(TICK)
                 continue
             panel = cv2.warpPerspective(client, M_panel_from_client, (W, H))
 
-            # ---- detect current cell + orange dot ----
             cur_cell = find_current_cell(panel, plan.n_rows, plan.n_cols,
                                          exclude=plan.goal)
             if cur_cell is None:
-                if self.tick_s > 0:
-                    time.sleep(self.tick_s)
+                if TICK > 0:
+                    time.sleep(TICK)
                 continue
 
+            # Panel-pixel position of the dot. Prefer cell-gated detector
+            # (more robust against red icons), fall back to whole-panel.
             orange = find_orange_centroid_in_cell(
                 panel, cur_cell, plan.n_rows, plan.n_cols)
-            orange_found = orange is not None
-            if orange is not None:
-                cur_px, cur_py = orange
-            else:
+            if orange is None:
+                p_any = detect_orange_current(panel)
+                orange = (p_any["center"][0], p_any["center"][1]) if p_any else None
+            if orange is None:
                 cur_px = (cur_cell[1] + 0.5) * plan.cell_w
                 cur_py = (cur_cell[0] + 0.5) * plan.cell_h
+            else:
+                cur_px, cur_py = orange
 
-            # ---- online gain update (uses motion observed since last move) ----
-            # Skip when the previous move was a stagnation PROBE (doubled
-            # step) or when the cursor jumped >1 cell in one tick (likely
-            # caused by a saturated probe): the (sent / observed) ratio
-            # in those cases is not a reliable steady-state gain.
-            cells_jumped = (
-                abs(cur_cell[0] - last_cell_idx[0]) +
-                abs(cur_cell[1] - last_cell_idx[1])
-                if last_cell_idx is not None else 0
-            )
-            if (
-                last_axis is not None
-                and last_panel_pos is not None
-                and abs(last_sent[last_axis]) > 0
-                and not last_was_probe
-                and last_orange_found
-                and orange_found
-                and cells_jumped <= 1
-            ):
-                if last_axis == "h":
-                    raw_motion = (cur_px - last_panel_pos[0])
-                else:
-                    raw_motion = (cur_py - last_panel_pos[1])
-                # Project observed motion onto INTENDED panel direction.
-                observed = raw_motion * last_intended_panel_dir
-                if observed > 1.0:
-                    g_obs = abs(last_sent[last_axis]) / observed
-                    g_obs = float(np.clip(g_obs, GAIN_OBS_MIN, GAIN_OBS_MAX))
-                    gain[last_axis] = 0.7 * gain[last_axis] + 0.3 * g_obs
-                    gain[last_axis] = float(np.clip(gain[last_axis], 0.2, 5.0))
-                    stagnation = 0
-                    probes_no_motion = 0
-                elif observed < -3.0:
-                    # Clear motion in the OPPOSITE direction -> the
-                    # screen->panel sign for this axis is inverted.
-                    # Flip and LOCK so we don't toggle later when the
-                    # dot gets pinned against a panel edge.
-                    if not axis_locked[last_axis]:
-                        axis_sign[last_axis] *= -1.0
-                        axis_locked[last_axis] = True
-                        print(f"[walk] axis flip on {last_axis} "
-                              f"(observed reversed motion); sign now "
-                              f"{int(axis_sign[last_axis])} (locked)")
-                    stagnation = 0
-                    probes_no_motion = 0
-                else:
-                    stagnation += 1
-
-            # ---- pick target cell ----
+            # ---- pick target cell (advance whenever cyan ring reaches it) ----
             on_path = cur_cell in path_set
             if on_path:
                 cur_idx = path_set[cur_cell]
@@ -619,114 +586,37 @@ class AssistApp:
                     return
                 target = path[cur_idx + 1]
             else:
-                # nearest path cell (Manhattan)
                 target = min(path, key=lambda p: abs(p[0] - cur_cell[0])
                              + abs(p[1] - cur_cell[1]))
 
-            if cur_cell != last_cell:
-                last_cell = cur_cell
-                stagnation = 0
+            if cur_cell != last_cell_logged:
+                last_cell_logged = cur_cell
                 tag = "on-path" if on_path else "OFF-path -> recovering"
-                print(f"[walk] now at {cur_cell} ({tag}, target {target}, "
-                      f"gain h={gain['h']:.2f} v={gain['v']:.2f})")
+                print(f"[walk] now at {cur_cell} ({tag}, target {target})")
 
             if target != last_target:
                 ticks_in_hop = 0
                 last_target = target
 
-            # ---- panel-space error to target center ----
             tgt_px = (target[1] + 0.5) * plan.cell_w
             tgt_py = (target[0] + 0.5) * plan.cell_h
-            err_x = tgt_px - cur_px  # panel pixels along panel-X
-            err_y = tgt_py - cur_py  # panel pixels along panel-Y
+            err_panel = np.array([tgt_px - cur_px, tgt_py - cur_py])
 
-            # Dead-band per axis (in panel pixels)
-            tol_x = TOL_FRAC * plan.cell_w
-            tol_y = TOL_FRAC * plan.cell_h
-
-            # Pick the dominant axis that is still outside its dead-band.
-            need_x = abs(err_x) > tol_x
-            need_y = abs(err_y) > tol_y
-            if not need_x and not need_y:
-                # Inside the target cell (or close enough); wait for the
-                # cyan-ring detection to advance the target next tick.
-                last_axis = None
-                last_sent = {"h": 0.0, "v": 0.0}
-                last_was_probe = False
-                if self.tick_s > 0:
-                    time.sleep(self.tick_s)
+            # Convert panel-pixel error to OS-pixel mouse delta.
+            os_delta = J_inv @ err_panel
+            mag = float(np.linalg.norm(os_delta))
+            if mag < 1.0:
+                # Already at target in OS terms; let the cyan ring catch up.
+                if TICK > 0:
+                    time.sleep(TICK)
                 continue
-            if need_x and (not need_y or abs(err_x) >= abs(err_y)):
-                panel_axis = "x"
-                err = err_x
-            else:
-                panel_axis = "y"
-                err = err_y
+            if mag > STEP_MAX:
+                os_delta = os_delta * (STEP_MAX / mag)
 
-            # Map this panel axis to a screen axis (single ±1 component).
-            if panel_axis == "x":
-                sx, sy = panel_axis_to_screen_axis(1.0 if err > 0 else -1.0, 0.0)
-            else:
-                sx, sy = panel_axis_to_screen_axis(0.0, 1.0 if err > 0 else -1.0)
-            # Which screen axis got picked?
-            scr_axis = "h" if abs(sx) > abs(sy) else "v"
+            move_cursor_rel(float(os_delta[0]), float(os_delta[1]))
 
-            # Proportional law in the panel domain, converted to OS pixels
-            # by the current gain estimate (OS_px per panel_px). When the
-            # error is at least one full cell away, overdrive to STEP_MAX
-            # so long hops don't ramp down to tiny nudges.
-            cell_size = plan.cell_w if panel_axis == "x" else plan.cell_h
-            if abs(err) >= OVERDRIVE_CELL_FRAC * cell_size:
-                mag = STEP_MAX_PX
-            else:
-                os_step = abs(err) * gain[scr_axis]
-                mag = float(np.clip(os_step, STEP_MIN_PX, STEP_MAX_PX))
-
-            # Stagnation: probably in the game's mouse-input dead zone OR
-            # we're pushing into a panel edge with the wrong sign. Push
-            # harder; if even probes don't produce motion, flip the axis
-            # sign on the assumption the controls are inverted.
-            is_probe = False
-            if stagnation >= STAGNATION_TICKS:
-                mag = min(STEP_MAX_PX * 4.0, mag * 2.0)
-                is_probe = True
-                if stagnation == STAGNATION_TICKS:
-                    print(f"[walk] stagnation -> probing {mag:.0f} OS px on {scr_axis}")
-                # Only flip on no-motion probes when (a) we have NEVER
-                # confirmed this axis via observed reversal, and (b) the
-                # orange dot is actually being detected (otherwise the
-                # cell-center fallback hides real motion).
-                if (
-                    probes_no_motion >= FLIP_AFTER_PROBES
-                    and not axis_locked[scr_axis]
-                    and orange_found
-                ):
-                    axis_sign[scr_axis] *= -1.0
-                    axis_locked[scr_axis] = True
-                    print(f"[walk] no progress after probes; flipping {scr_axis} "
-                          f"sign to {int(axis_sign[scr_axis])} (locked)")
-                    stagnation = 0
-                    probes_no_motion = 0
-                else:
-                    probes_no_motion += 1
-
-            # Apply the learned per-axis sign.
-            sign_mul = axis_sign[scr_axis]
-            os_dx = sx * mag * sign_mul
-            os_dy = sy * mag * sign_mul
-
-            move_cursor_rel(os_dx, os_dy)
-            last_sent = {"h": 0.0, "v": 0.0}
-            last_sent[scr_axis] = os_dx if scr_axis == "h" else os_dy
-            last_axis = scr_axis
-            last_intended_panel_dir = 1.0 if err > 0 else -1.0
-            last_panel_pos = (cur_px, cur_py)
-            last_cell_idx = cur_cell
-            last_orange_found = orange_found
-            last_was_probe = is_probe
-
-            if self.tick_s > 0:
-                time.sleep(self.tick_s)
+            if TICK > 0:
+                time.sleep(TICK)
 
     # ---- main loop ----
     def run_console(self, hwnd: int, title: str):
@@ -762,7 +652,7 @@ def pick_window_gui() -> tuple[int, str, bool] | None:
     chosen = {"hwnd": None, "title": "", "debug": False}
 
     root = tk.Tk()
-    root.title("Hack-Panel Assist – select game window")
+    root.title("Hack-Panel Assist 鈥?select game window")
     root.geometry("700x460")
 
     ttk.Label(root, text="Pick the game window:").pack(anchor="w", padx=12, pady=8)
