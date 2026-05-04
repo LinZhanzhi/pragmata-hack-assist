@@ -434,13 +434,22 @@ class AssistApp:
             return None
         return float(info["center"][0]), float(info["center"][1])
 
-    def _calibrate_jacobian(self, M_panel_from_client, W, H):
-        """Probe the mouse on screen-X and screen-Y; measure how the
-        orange dot moves in panel pixels; return the 2x2 Jacobian
-        ``J`` such that  panel_delta = J @ os_delta, with units
-        panel_px / OS_px. Returns None if the probes can't be observed.
+    def _calibrate_jacobian(self, M_panel_from_client, W, H, plan):
+        """Probe the mouse on two screen directions, measure how the
+        orange dot moves in panel pixels, return the 2x2 Jacobian
+        ``J`` such that  panel_delta = J @ os_delta (panel_px / OS_px).
+
+        The two probe directions are chosen from the planned path so the
+        first probe nudges the cursor in the SAFE direction the player
+        already wants to go (= toward path[1]), not blindly +X. This
+        avoids the case where the panel forbids stepping right from
+        the start cell. The second probe is perpendicular, with sign
+        also taken from the path's first perpendicular hop when present
+        (else +1).
+
+        Returns None if the probes can't be observed.
         """
-        PROBE_OS = 80.0
+        PROBE_OS = 60.0
         # Settle longer than steady-state ticks: the very first probe
         # also has to wait for the capture pipeline to reflect the move.
         # Pragmata at 60 FPS needs at least ~33 ms; we double that.
@@ -454,43 +463,108 @@ class AssistApp:
                 time.sleep(0.02)
             return None
 
+        # ---- decide probe directions from the path geometry ----
+        def panel_dir_to_screen(dr: float, dc: float) -> tuple[str, float]:
+            """Geometric guess (via M_inv) at which screen axis & sign
+            most closely produces the requested (dr, dc) panel motion.
+            The game may invert this sign in practice; we only use it
+            as a hint and trust the measured Jacobian afterward."""
+            dx_p = dc * plan.cell_w
+            dy_p = dr * plan.cell_h
+            o = plan.M_inv @ np.array([W * 0.5, H * 0.5, 1.0])
+            t = plan.M_inv @ np.array([W * 0.5 + dx_p,
+                                       H * 0.5 + dy_p, 1.0])
+            o /= o[2]; t /= t[2]
+            sx = float(t[0] - o[0])
+            sy = float(t[1] - o[1])
+            if abs(sx) >= abs(sy):
+                return ("h", 1.0 if sx > 0 else -1.0)
+            return ("v", 1.0 if sy > 0 else -1.0)
+
+        path = plan.path or []
+        if len(path) >= 2:
+            dr1 = path[1][0] - path[0][0]
+            dc1 = path[1][1] - path[0][1]
+            axis1, sign1 = panel_dir_to_screen(dr1, dc1)
+        else:
+            axis1, sign1 = "h", 1.0
+
+        # Perpendicular axis; sign from first path hop that uses the
+        # perpendicular panel axis. Default +1 when path is straight.
+        axis2 = "v" if axis1 == "h" else "h"
+        sign2 = 1.0
+        perp_panel_is_y = (axis1 == "h")  # if first probe was screen-X
+        # (which mostly maps to panel-X) then the perpendicular is panel-Y.
+        for i in range(1, len(path) - 1):
+            ddr = path[i + 1][0] - path[i][0]
+            ddc = path[i + 1][1] - path[i][1]
+            if perp_panel_is_y and ddr != 0:
+                a, s = panel_dir_to_screen(ddr, 0)
+                if a == axis2:
+                    sign2 = s
+                    break
+            elif (not perp_panel_is_y) and ddc != 0:
+                a, s = panel_dir_to_screen(0, ddc)
+                if a == axis2:
+                    sign2 = s
+                    break
+
+        print(f"[cal] probe1 {axis1}{'+' if sign1 > 0 else '-'} "
+              f"probe2 {axis2}{'+' if sign2 > 0 else '-'} "
+              f"(from path-first direction)")
+
+        def probe_vec(axis: str, sign: float) -> tuple[float, float]:
+            return ((PROBE_OS * sign, 0.0) if axis == "h"
+                    else (0.0, PROBE_OS * sign))
+
+        # ---- run the two probes ----
         p0 = measure()
         if p0 is None:
             print("[cal] could not see orange dot at start of probe")
             return None
 
-        move_cursor_rel(PROBE_OS, 0.0)
+        d1x, d1y = probe_vec(axis1, sign1)
+        move_cursor_rel(d1x, d1y)
         time.sleep(SETTLE)
         p1 = measure()
-        move_cursor_rel(-PROBE_OS, 0.0)   # return to ~start
+        move_cursor_rel(-d1x, -d1y)   # return to ~start
         time.sleep(SETTLE)
         if p1 is None:
-            print("[cal] lost orange dot after +X probe")
+            print(f"[cal] lost orange dot after probe1 ({axis1})")
             return None
 
         p_mid = measure()
         if p_mid is None:
             p_mid = p0  # fallback
 
-        move_cursor_rel(0.0, PROBE_OS)
+        d2x, d2y = probe_vec(axis2, sign2)
+        move_cursor_rel(d2x, d2y)
         time.sleep(SETTLE)
         p2 = measure()
-        move_cursor_rel(0.0, -PROBE_OS)
+        move_cursor_rel(-d2x, -d2y)
         time.sleep(SETTLE)
         if p2 is None:
-            print("[cal] lost orange dot after +Y probe")
+            print(f"[cal] lost orange dot after probe2 ({axis2})")
             return None
 
-        # Columns of J: panel response per OS unit on each screen axis.
-        col_x = ((p1[0] - p0[0]) / PROBE_OS, (p1[1] - p0[1]) / PROBE_OS)
-        col_y = ((p2[0] - p_mid[0]) / PROBE_OS, (p2[1] - p_mid[1]) / PROBE_OS)
-        J = np.array([[col_x[0], col_y[0]],
-                      [col_x[1], col_y[1]]], dtype=np.float64)
+        # Columns: panel response per OS unit along the SCREEN axes.
+        # probe1 sent (d1x, d1y) OS px and produced (p1-p0) panel px.
+        # That measures column `axis1` of J after dividing by sign*PROBE_OS.
+        col1 = ((p1[0] - p0[0]) / (PROBE_OS * sign1),
+                (p1[1] - p0[1]) / (PROBE_OS * sign1))
+        col2 = ((p2[0] - p_mid[0]) / (PROBE_OS * sign2),
+                (p2[1] - p_mid[1]) / (PROBE_OS * sign2))
+        # Place columns in the (h, v) order expected by callers:
+        # J[:,0] = response per OS-X, J[:,1] = response per OS-Y.
+        col_h = col1 if axis1 == "h" else col2
+        col_v = col2 if axis1 == "h" else col1
+        J = np.array([[col_h[0], col_v[0]],
+                      [col_h[1], col_v[1]]], dtype=np.float64)
 
         # Sanity: each column needs nontrivial magnitude (the game
         # actually responded). If a column is near zero, calibration is
         # garbage -- the game ate the input or the dot didn't move.
-        if (np.linalg.norm(col_x) < 0.05) or (np.linalg.norm(col_y) < 0.05):
+        if (np.linalg.norm(col_h) < 0.05) or (np.linalg.norm(col_v) < 0.05):
             print(f"[cal] probe response too small: J=\n{J}")
             return None
         if abs(np.linalg.det(J)) < 1e-4:
@@ -525,7 +599,7 @@ class AssistApp:
 
         # ---- 1. calibrate ----
         print("[walk] calibrating mouse->panel mapping...")
-        J = self._calibrate_jacobian(M_panel_from_client, W, H)
+        J = self._calibrate_jacobian(M_panel_from_client, W, H, plan)
         if J is None:
             print("[walk] calibration failed; aborting walk")
             return
