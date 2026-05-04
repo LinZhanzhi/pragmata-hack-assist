@@ -508,9 +508,14 @@ class AssistApp:
         # may be inverted relative to the M_inv-derived geometric sign.
         # We start at +1 and learn a flip from observed motion.
         axis_sign = {"h": 1.0, "v": 1.0}
+        # Once an axis sign has been confirmed by observed reversed motion,
+        # we lock it to prevent the no-motion-probe heuristic from
+        # un-flipping it when the dot ends up pinned against a panel edge.
+        axis_locked = {"h": False, "v": False}
         last_sent = {"h": 0.0, "v": 0.0}
         last_axis: str | None = None
         last_intended_panel_dir = 0.0   # +1 / -1 panel direction we wanted last tick
+        last_orange_found = False       # was orange ACTUALLY detected last tick?
         last_was_probe = False
         last_panel_pos: tuple[float, float] | None = None
         last_cell_idx: tuple[int, int] | None = path[0]
@@ -549,6 +554,7 @@ class AssistApp:
 
             orange = find_orange_centroid_in_cell(
                 panel, cur_cell, plan.n_rows, plan.n_cols)
+            orange_found = orange is not None
             if orange is not None:
                 cur_px, cur_py = orange
             else:
@@ -570,6 +576,8 @@ class AssistApp:
                 and last_panel_pos is not None
                 and abs(last_sent[last_axis]) > 0
                 and not last_was_probe
+                and last_orange_found
+                and orange_found
                 and cells_jumped <= 1
             ):
                 if last_axis == "h":
@@ -588,10 +596,14 @@ class AssistApp:
                 elif observed < -3.0:
                     # Clear motion in the OPPOSITE direction -> the
                     # screen->panel sign for this axis is inverted.
-                    axis_sign[last_axis] *= -1.0
-                    print(f"[walk] axis flip on {last_axis} "
-                          f"(observed reversed motion); sign now "
-                          f"{int(axis_sign[last_axis])}")
+                    # Flip and LOCK so we don't toggle later when the
+                    # dot gets pinned against a panel edge.
+                    if not axis_locked[last_axis]:
+                        axis_sign[last_axis] *= -1.0
+                        axis_locked[last_axis] = True
+                        print(f"[walk] axis flip on {last_axis} "
+                              f"(observed reversed motion); sign now "
+                              f"{int(axis_sign[last_axis])} (locked)")
                     stagnation = 0
                     probes_no_motion = 0
                 else:
@@ -680,10 +692,19 @@ class AssistApp:
                 is_probe = True
                 if stagnation == STAGNATION_TICKS:
                     print(f"[walk] stagnation -> probing {mag:.0f} OS px on {scr_axis}")
-                if probes_no_motion >= FLIP_AFTER_PROBES:
+                # Only flip on no-motion probes when (a) we have NEVER
+                # confirmed this axis via observed reversal, and (b) the
+                # orange dot is actually being detected (otherwise the
+                # cell-center fallback hides real motion).
+                if (
+                    probes_no_motion >= FLIP_AFTER_PROBES
+                    and not axis_locked[scr_axis]
+                    and orange_found
+                ):
                     axis_sign[scr_axis] *= -1.0
+                    axis_locked[scr_axis] = True
                     print(f"[walk] no progress after probes; flipping {scr_axis} "
-                          f"sign to {int(axis_sign[scr_axis])}")
+                          f"sign to {int(axis_sign[scr_axis])} (locked)")
                     stagnation = 0
                     probes_no_motion = 0
                 else:
@@ -701,6 +722,7 @@ class AssistApp:
             last_intended_panel_dir = 1.0 if err > 0 else -1.0
             last_panel_pos = (cur_px, cur_py)
             last_cell_idx = cur_cell
+            last_orange_found = orange_found
             last_was_probe = is_probe
 
             if self.tick_s > 0:
