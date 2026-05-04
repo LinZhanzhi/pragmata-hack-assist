@@ -48,24 +48,47 @@ def _green_mask(bgr: np.ndarray) -> np.ndarray:
 def detect_green_dest(bgr: np.ndarray) -> dict | None:
     """Find the destination-cell green icon in a warped panel.
 
-    Returns a dict with bbox, area, aspect, solidity, and a `ready` flag
-    indicating whether the icon passes the fully-loaded gate. Returns
-    None when no green blob is found at all.
+    We enumerate green connected components and pick the largest one that
+    passes the "fully-loaded" gate (area + solidity). Picking the
+    overall-largest blob is wrong on big panels: scanline / glitch effects
+    can connect dozens of small green pixels into a tall, low-solidity
+    column whose area dwarfs the real icon. Falling back to the largest
+    blob (with `ready=False`) is preserved so callers can still inspect
+    why nothing passed.
     """
     m = _green_mask(bgr)
     n, _, stats, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
     if n <= 1:
         return None
+
+    def _stats(i):
+        x = int(stats[i, cv2.CC_STAT_LEFT])
+        y = int(stats[i, cv2.CC_STAT_TOP])
+        w = int(stats[i, cv2.CC_STAT_WIDTH])
+        h = int(stats[i, cv2.CC_STAT_HEIGHT])
+        a = int(stats[i, cv2.CC_STAT_AREA])
+        return x, y, w, h, a
+
+    # First pass: only blobs that pass the gate.
+    qualified = []
+    for i in range(1, n):
+        x, y, w, h, a = _stats(i)
+        sol = a / max(w * h, 1)
+        if a >= MIN_AREA and sol >= MIN_SOLIDITY:
+            qualified.append((a, i, x, y, w, h, sol))
+
+    if qualified:
+        qualified.sort(reverse=True)
+        a, _, x, y, w, h, sol = qualified[0]
+        return dict(bbox=(x, y, w, h), area=a,
+                    aspect=w / max(h, 1), solidity=sol, ready=True)
+
+    # Fallback: report the largest blob with ready=False (legacy behavior).
     best = max(range(1, n), key=lambda i: stats[i, cv2.CC_STAT_AREA])
-    x, y, w, h, area = (int(stats[best, k]) for k in
-                        (cv2.CC_STAT_LEFT, cv2.CC_STAT_TOP,
-                         cv2.CC_STAT_WIDTH, cv2.CC_STAT_HEIGHT,
-                         cv2.CC_STAT_AREA))
-    aspect = w / max(h, 1)
-    solidity = area / max(w * h, 1)
-    ready = (area >= MIN_AREA and solidity >= MIN_SOLIDITY)
-    return dict(bbox=(x, y, w, h), area=area,
-                aspect=aspect, solidity=solidity, ready=ready)
+    x, y, w, h, a = _stats(best)
+    sol = a / max(w * h, 1)
+    return dict(bbox=(x, y, w, h), area=a,
+                aspect=w / max(h, 1), solidity=sol, ready=False)
 
 
 def infer_grid_from_dest(bgr: np.ndarray) -> dict | None:

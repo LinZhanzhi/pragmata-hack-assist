@@ -468,8 +468,33 @@ class AssistApp:
         ticks_in_hop = 0
         last_target = None
         t_start = time.time()
-        # step_px = float(WALK_STEP_INIT_PX)   # adaptive variant (disabled)
-        # no_progress = 0
+
+        # ----- closed-loop proportional controller state -----
+        # gain[a] = OS pixels we need to send along screen axis `a` to move
+        # the orange dot ONE pixel in panel space along the panel axis that
+        # this screen axis maps to. Starts as a guess: assume the user's
+        # current --step value moves the dot by ~ half the smaller cell
+        # dimension. Updated online from observed motion / sent OS pixels.
+        cell_min = max(8.0, min(plan.cell_w, plan.cell_h))
+        gain_init = max(0.5, self.step_px / max(cell_min * 0.5, 1.0))
+        gain = {"h": gain_init, "v": gain_init}
+        # MAX clamp = the user's --step (so the original feel is preserved
+        # as a hard cap). MIN clamp must be high enough to clear the game's
+        # raw-input dead zone or we never move.
+        STEP_MIN_PX = 6.0
+        STEP_MAX_PX = max(20.0, self.step_px)
+        # Dead-band: stop nudging an axis once the orange dot is within
+        # this fraction of cell_size from the target center. The cyan ring
+        # transition will advance the target on the next tick.
+        TOL_FRAC = 0.20
+        # Stagnation watchdog: if no panel-pixel progress for this many
+        # consecutive ticks on an axis, double the step (probably below
+        # the game's mouse-input dead zone). Reset after any progress.
+        STAGNATION_TICKS = 4
+        last_sent = {"h": 0.0, "v": 0.0}
+        last_axis: str | None = None
+        last_panel_pos: tuple[float, float] | None = None
+        stagnation = 0
 
         while True:
             # ---- abort conditions ----
@@ -497,7 +522,6 @@ class AssistApp:
             cur_cell = find_current_cell(panel, plan.n_rows, plan.n_cols,
                                          exclude=plan.goal)
             if cur_cell is None:
-                # No cyan ring detected -- can't safely move. Skip this tick.
                 if self.tick_s > 0:
                     time.sleep(self.tick_s)
                 continue
@@ -509,6 +533,27 @@ class AssistApp:
             else:
                 cur_px = (cur_cell[1] + 0.5) * plan.cell_w
                 cur_py = (cur_cell[0] + 0.5) * plan.cell_h
+
+            # ---- online gain update (uses motion observed since last move) ----
+            if (last_axis is not None and last_panel_pos is not None
+                    and abs(last_sent[last_axis]) > 0):
+                # Project observed panel motion onto the panel axis the
+                # last move was meant to drive. Sign-check filters out
+                # detection jitter going against our move.
+                if last_axis == "h":
+                    panel_dir = (1.0 if last_sent["h"] > 0 else -1.0)
+                    observed = (cur_px - last_panel_pos[0]) * panel_dir
+                else:
+                    panel_dir = (1.0 if last_sent["v"] > 0 else -1.0)
+                    observed = (cur_py - last_panel_pos[1]) * panel_dir
+                if observed > 1.0:
+                    g_obs = abs(last_sent[last_axis]) / observed
+                    # Slow EMA: detection is noisy, don't overreact.
+                    gain[last_axis] = 0.7 * gain[last_axis] + 0.3 * g_obs
+                    gain[last_axis] = float(np.clip(gain[last_axis], 0.2, 50.0))
+                    stagnation = 0
+                else:
+                    stagnation += 1
 
             # ---- pick target cell ----
             on_path = cur_cell in path_set
@@ -525,43 +570,80 @@ class AssistApp:
                              + abs(p[1] - cur_cell[1]))
 
             if cur_cell != last_cell:
-                # step_px = max(WALK_STEP_MIN_PX, step_px * 0.5)  # adaptive
-                # no_progress = 0
                 last_cell = cur_cell
+                stagnation = 0
                 tag = "on-path" if on_path else "OFF-path -> recovering"
-                print(f"[walk] now at {cur_cell} ({tag}, target {target})")
+                print(f"[walk] now at {cur_cell} ({tag}, target {target}, "
+                      f"gain h={gain['h']:.2f} v={gain['v']:.2f})")
 
             if target != last_target:
                 ticks_in_hop = 0
                 last_target = target
 
-            # ---- panel-space direction toward target center ----
+            # ---- panel-space error to target center ----
             tgt_px = (target[1] + 0.5) * plan.cell_w
             tgt_py = (target[0] + 0.5) * plan.cell_h
-            dx_p = tgt_px - cur_px
-            dy_p = tgt_py - cur_py
+            err_x = tgt_px - cur_px  # panel pixels along panel-X
+            err_y = tgt_py - cur_py  # panel pixels along panel-Y
 
-            # tolerance: if we're inside the target cell already, the
-            # cyan-ring re-detection on the next tick will advance us.
-            if abs(dx_p) < 1.0 and abs(dy_p) < 1.0:
+            # Dead-band per axis (in panel pixels)
+            tol_x = TOL_FRAC * plan.cell_w
+            tol_y = TOL_FRAC * plan.cell_h
+
+            # Pick the dominant axis that is still outside its dead-band.
+            need_x = abs(err_x) > tol_x
+            need_y = abs(err_y) > tol_y
+            if not need_x and not need_y:
+                # Inside the target cell (or close enough); wait for the
+                # cyan-ring detection to advance the target next tick.
+                last_axis = None
+                last_sent = {"h": 0.0, "v": 0.0}
                 if self.tick_s > 0:
                     time.sleep(self.tick_s)
                 continue
-
-            # only one panel axis at a time -> one screen axis at a time
-            if abs(dx_p) >= abs(dy_p):
-                sx, sy = panel_axis_to_screen_axis(1.0 if dx_p > 0 else -1.0, 0.0)
+            if need_x and (not need_y or abs(err_x) >= abs(err_y)):
+                panel_axis = "x"
+                err = err_x
             else:
-                sx, sy = panel_axis_to_screen_axis(0.0, 1.0 if dy_p > 0 else -1.0)
+                panel_axis = "y"
+                err = err_y
 
-            # adaptive step (disabled):
-            # no_progress += 1
-            # if no_progress >= WALK_NO_PROGRESS_GROW:
-            #     step_px = min(WALK_STEP_MAX_PX, step_px * 1.5)
-            #     no_progress = 0
-            #     print(f"[walk] no progress, step -> {step_px:.0f} px")
+            # Map this panel axis to a screen axis (single ±1 component).
+            if panel_axis == "x":
+                sx, sy = panel_axis_to_screen_axis(1.0 if err > 0 else -1.0, 0.0)
+            else:
+                sx, sy = panel_axis_to_screen_axis(0.0, 1.0 if err > 0 else -1.0)
+            # Which screen axis got picked?
+            scr_axis = "h" if abs(sx) > abs(sy) else "v"
 
-            move_cursor_rel(sx * self.step_px, sy * self.step_px)
+            # Proportional law in the panel domain, converted to OS pixels
+            # by the current gain estimate (OS_px per panel_px).
+            os_step_signed = err * gain[scr_axis]
+            mag = float(np.clip(abs(os_step_signed), STEP_MIN_PX, STEP_MAX_PX))
+
+            # Stagnation: probably in the game's mouse-input dead zone.
+            # Push harder. Doubles each STAGNATION_TICKS ticks until we move.
+            if stagnation >= STAGNATION_TICKS:
+                mag = min(STEP_MAX_PX * 4.0, mag * 2.0)
+                # don't reset stagnation here; let the next observation do it
+                if stagnation == STAGNATION_TICKS:
+                    print(f"[walk] stagnation -> probing {mag:.0f} OS px on {scr_axis}")
+
+            sgn = 1.0 if os_step_signed > 0 else -1.0
+            os_dx = sx * mag * (1.0 if (sx * sgn) >= 0 else -1.0)
+            os_dy = sy * mag * (1.0 if (sy * sgn) >= 0 else -1.0)
+            # Simpler: the panel_axis_to_screen_axis already encodes the
+            # *sign* needed to push err toward zero (we passed a +1/-1 by
+            # error sign). So just send |mag| along (sx, sy).
+            os_dx = sx * mag
+            os_dy = sy * mag
+
+            move_cursor_rel(os_dx, os_dy)
+            last_sent = {"h": 0.0, "v": 0.0}
+            last_sent[scr_axis] = os_dx if scr_axis == "h" else os_dy
+            last_axis = scr_axis
+            last_panel_pos = (cur_px, cur_py)
+
             if self.tick_s > 0:
                 time.sleep(self.tick_s)
 
