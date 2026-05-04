@@ -130,13 +130,32 @@ def find_current_cell(
 ) -> tuple[int, int] | None:
     """Return (row, col) of the cell containing the 'you are here' marker.
 
-    Strategy: the marker is 4 cyan dots on the cell's 4 border midpoints. We
-    score each cell by how many cyan pixels lie within a thin band around its
-    border, and pick the cell with the strongest score (above a minimum).
-    The optional ``exclude`` cell (typically the destination) is skipped to
-    avoid the dest icon's outer glow, which can pass the cyan threshold.
+    Primary strategy: detect the orange dot (the actual player cursor)
+    and return the cell whose bounds contain its centroid. The orange
+    detector has tight thresholds and is robust against the panel's
+    bluish background, so this avoids the failure mode where cyan-mask
+    pixels from background lighting outvote the real marker dots.
+
+    Fallback: when the orange dot is not present (some panels render
+    only the cyan 4-dot ring), score each cell by cyan pixels in a thin
+    border band and pick the highest. The optional ``exclude`` cell
+    (typically the destination) is skipped to avoid the dest icon's
+    outer glow.
     """
     H, W = bgr.shape[:2]
+
+    # --- Primary: orange-dot location -> containing cell ---
+    o = detect_orange_current(bgr)
+    if o is not None and o.get("ready"):
+        cx, cy = o["center"]
+        cw = W / n_cols
+        ch = H / n_rows
+        c = max(0, min(n_cols - 1, int(cx // cw)))
+        r = max(0, min(n_rows - 1, int(cy // ch)))
+        if exclude is None or (r, c) != exclude:
+            return (r, c)
+
+    # --- Fallback: cyan-ring border-band scoring ---
     cm = _cyan_mask(bgr)
 
     cw = W / n_cols
