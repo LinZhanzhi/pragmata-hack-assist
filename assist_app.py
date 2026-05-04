@@ -591,16 +591,16 @@ class AssistApp:
 
 # --- Tk window picker --------------------------------------------------------
 
-def pick_window_gui() -> tuple[int, str] | None:
+def pick_window_gui() -> tuple[int, str, bool] | None:
     import tkinter as tk
     from tkinter import ttk
 
     wins = list_visible_windows()
-    chosen = {"hwnd": None, "title": ""}
+    chosen = {"hwnd": None, "title": "", "debug": False}
 
     root = tk.Tk()
     root.title("Hack-Panel Assist – select game window")
-    root.geometry("700x420")
+    root.geometry("700x460")
 
     ttk.Label(root, text="Pick the game window:").pack(anchor="w", padx=12, pady=8)
     frame = ttk.Frame(root)
@@ -620,6 +620,8 @@ def pick_window_gui() -> tuple[int, str] | None:
         for hwnd, title in wins:
             lb.insert("end", f"{hwnd:>10}  {title}")
 
+    debug_var = tk.BooleanVar(value=False)
+
     def confirm():
         sel = lb.curselection()
         if not sel:
@@ -627,7 +629,16 @@ def pick_window_gui() -> tuple[int, str] | None:
         hwnd, title = wins[sel[0]]
         chosen["hwnd"] = hwnd
         chosen["title"] = title
+        chosen["debug"] = bool(debug_var.get())
         root.destroy()
+
+    opts = ttk.Frame(root)
+    opts.pack(fill="x", padx=12, pady=(8, 0))
+    ttk.Checkbutton(
+        opts,
+        text="Debug mode (dump capture, bbox, warp, cells, overlay per trigger)",
+        variable=debug_var,
+    ).pack(anchor="w")
 
     bar = ttk.Frame(root)
     bar.pack(fill="x", pady=8, padx=12)
@@ -638,7 +649,7 @@ def pick_window_gui() -> tuple[int, str] | None:
     root.mainloop()
     if chosen["hwnd"] is None:
         return None
-    return chosen["hwnd"], chosen["title"]
+    return chosen["hwnd"], chosen["title"], chosen["debug"]
 
 
 # --- entry -------------------------------------------------------------------
