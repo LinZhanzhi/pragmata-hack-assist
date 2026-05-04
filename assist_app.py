@@ -60,6 +60,7 @@ from train_cell_classifier import IMG_SIZE, SmallCNN  # noqa: E402
 CLS_WEIGHTS = PD / "runs" / "cell_classifier" / "v1_best.pt"
 LIVE_DIR = PD / "runs" / "live"
 LIVE_DIR.mkdir(parents=True, exist_ok=True)
+DEBUG_DIR = PD / "runs" / "debug"     # one subfolder per trigger when --debug
 
 ALPHA, BETA = 5.0, 1.0
 # Closed-loop walker tunables. We track the orange dot in panel space and
@@ -224,16 +225,33 @@ class Engine:
             transforms.Normalize([0.5] * 3, [0.5] * 3),
         ])
 
-    def plan(self, client_bgr: np.ndarray) -> PlanResult | None:
+    def plan(self, client_bgr: np.ndarray,
+             debug_dir: "Path | None" = None) -> "PlanResult | None":
         # 1. detect panel
         results = self.yolo.predict(source=client_bgr, conf=0.25, verbose=False)
         if not results or len(results[0].boxes) == 0:
             print("[plan] no panel detected")
+            if debug_dir is not None:
+                cv2.imwrite(str(debug_dir / "01_capture.png"), client_bgr)
             return None
         boxes = results[0].boxes
         best = int(boxes.conf.argmax().item())
         xyxy = boxes.xyxy[best].cpu().numpy()
         kpts = corners_from_bbox(xyxy)  # 4x2 in client coords (TL,TR,BR,BL)
+
+        if debug_dir is not None:
+            cv2.imwrite(str(debug_dir / "01_capture.png"), client_bgr)
+            vis = client_bgr.copy()
+            x0, y0, x1, y1 = (int(round(v)) for v in xyxy[:4])
+            cv2.rectangle(vis, (x0, y0), (x1, y1), (0, 255, 0), 2)
+            corner_colors = [(0, 0, 255), (0, 255, 255),
+                             (255, 0, 255), (255, 255, 0)]  # TL TR BR BL
+            for (cx, cy), col in zip(kpts, corner_colors):
+                cv2.circle(vis, (int(round(cx)), int(round(cy))), 6, col, -1)
+            cv2.putText(vis, f"conf={float(boxes.conf[best]):.2f}",
+                        (x0, max(0, y0 - 8)), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6, (0, 255, 0), 2)
+            cv2.imwrite(str(debug_dir / "02_capture_with_bbox.png"), vis)
 
         out_w, out_h = warp_size_from_bbox(xyxy)
         dst = np.array([[0, 0], [out_w - 1, 0],
@@ -242,6 +260,9 @@ class Engine:
         M = cv2.getPerspectiveTransform(kpts, dst)
         M_inv = np.linalg.inv(M)
         panel = cv2.warpPerspective(client_bgr, M, (out_w, out_h))
+
+        if debug_dir is not None:
+            cv2.imwrite(str(debug_dir / "03_panel_warped.png"), panel)
 
         # 2. infer grid + dest
         grid = infer_grid_from_dest(panel)
@@ -262,9 +283,11 @@ class Engine:
         xs = [round(c * W / n_cols) for c in range(n_cols + 1)]
         ys = [round(r * H / n_rows) for r in range(n_rows + 1)]
         crops = []
+        cell_imgs = []
         for r in range(n_rows):
             for c in range(n_cols):
                 cell = panel[ys[r]:ys[r + 1], xs[c]:xs[c + 1]]
+                cell_imgs.append(cell)
                 rgb = cv2.cvtColor(cell, cv2.COLOR_BGR2RGB)
                 crops.append(self.tf(Image.fromarray(rgb)))
         batch = torch.stack(crops).to(self.device)
@@ -274,6 +297,16 @@ class Engine:
         for i in range(n_rows * n_cols):
             r, c = divmod(i, n_cols)
             labels[r, c] = self.classes[int(probs[i].argmax())]
+
+        if debug_dir is not None:
+            cells_dir = debug_dir / "04_cells"
+            cells_dir.mkdir(exist_ok=True)
+            for i, cell in enumerate(cell_imgs):
+                r, c = divmod(i, n_cols)
+                conf = float(probs[i].max())
+                lbl = labels[r, c]
+                fname = f"r{r:02d}_c{c:02d}_{lbl}_{conf:.2f}.png"
+                cv2.imwrite(str(cells_dir / fname), cell)
 
         # 5. build kind grid
         kind = [["normal"] * n_cols for _ in range(n_rows)]
@@ -303,7 +336,8 @@ class Engine:
 
 # --- runtime app -------------------------------------------------------------
 class AssistApp:
-    def __init__(self, step_px: float = WALK_STEP_PX, tick_s: float = WALK_TICK_S):
+    def __init__(self, step_px: float = WALK_STEP_PX, tick_s: float = WALK_TICK_S,
+                 debug: bool = False):
         self.engine: Engine | None = None
         self.target_hwnd: int | None = None
         self.target_title: str = ""
@@ -315,6 +349,7 @@ class AssistApp:
         self.event_q: Queue = Queue()
         self.step_px = float(step_px)
         self.tick_s = float(tick_s)
+        self.debug = bool(debug)
 
     # ---- input listeners ----
     def _on_click(self, x, y, button, pressed):
@@ -358,10 +393,17 @@ class AssistApp:
                 return
             ts = time.strftime("%Y%m%d_%H%M%S")
             cv2.imwrite(str(LIVE_DIR / f"{ts}_capture.png"), client)
-            plan = self.engine.plan(client)
+            debug_dir = None
+            if self.debug:
+                debug_dir = DEBUG_DIR / ts
+                debug_dir.mkdir(parents=True, exist_ok=True)
+                print(f"[debug] writing artifacts to {debug_dir}")
+            plan = self.engine.plan(client, debug_dir=debug_dir)
             if plan is None:
                 return
             cv2.imwrite(str(LIVE_DIR / f"{ts}_overlay.png"), plan.overlay_bgr)
+            if debug_dir is not None:
+                cv2.imwrite(str(debug_dir / "05_overlay.png"), plan.overlay_bgr)
             print(f"[trigger] plan: {plan.n_rows}x{plan.n_cols} "
                   f"start={plan.start} goal={plan.goal} "
                   f"path_len={(len(plan.path)-1) if plan.path else -1} "
@@ -531,6 +573,8 @@ class AssistApp:
         self.start_listeners()
         print(f"\n[ready] target window: {title!r} (hwnd={hwnd})")
         print(f"[walker] step={self.step_px:.0f} px, tick={self.tick_s:.3f} s")
+        if self.debug:
+            print(f"[debug] ON \u2192 artifacts will be saved under {DEBUG_DIR}")
         print("Hold RIGHT MOUSE + MOUSE 4, then tap T to trigger.")
         print("ESC or releasing RMB/M4 aborts the active walk. Ctrl+C to quit.")
         try:
@@ -609,6 +653,8 @@ def main():
                     help=f"OS-pixel magnitude per mouse nudge (default {WALK_STEP_PX}).")
     ap.add_argument("--tick", type=float, default=WALK_TICK_S,
                     help="Sleep seconds between ticks; 0 = fastest (default 0).")
+    ap.add_argument("--debug", action="store_true",
+                    help="Dump per-trigger artifacts under panel_detector/runs/debug/.")
     args = ap.parse_args()
 
     if args.list:
@@ -619,14 +665,16 @@ def main():
     if args.hwnd is not None:
         hwnd = args.hwnd
         title = win32gui.GetWindowText(hwnd)
+        debug = args.debug
     else:
         picked = pick_window_gui()
         if picked is None:
             print("no window chosen, exiting")
             return
-        hwnd, title = picked
+        hwnd, title, debug = picked
+        debug = debug or args.debug
 
-    AssistApp(step_px=args.step, tick_s=args.tick).run_console(hwnd, title)
+    AssistApp(step_px=args.step, tick_s=args.tick, debug=debug).run_console(hwnd, title)
 
 
 if __name__ == "__main__":

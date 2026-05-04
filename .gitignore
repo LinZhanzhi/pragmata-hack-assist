@@ -30,6 +30,7 @@ panel_detector/runs/cell_classifier/
 panel_detector/runs/current_check/
 panel_detector/runs/path_demo/
 panel_detector/runs/live/
+panel_detector/runs/debug/
 yolov8n-cls.pt
 
 # LS exports kept at repo root for reference, ignored from git
