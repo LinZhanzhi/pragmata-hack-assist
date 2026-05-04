@@ -67,7 +67,7 @@ ALPHA, BETA = 5.0, 1.0
 # nudge the mouse one screen-axis at a time. Step is fixed for now; the
 # adaptive variant is preserved below in comments for later experiments.
 WALK_TICK_S = 0.0            # delay between capture/move iterations (0 = no sleep, fastest)
-WALK_STEP_PX = 75            # default OS-pixel magnitude per nudge (overridable via --step)
+WALK_STEP_PX = 120           # default OS-pixel UPPER BOUND per nudge (overridable via --step)
 # WALK_STEP_INIT_PX = 25     # initial OS-pixel magnitude per nudge
 # WALK_STEP_MIN_PX = 4
 # WALK_STEP_MAX_PX = 200
@@ -478,22 +478,31 @@ class AssistApp:
         cell_min = max(8.0, min(plan.cell_w, plan.cell_h))
         gain_init = max(0.5, self.step_px / max(cell_min * 0.5, 1.0))
         gain = {"h": gain_init, "v": gain_init}
-        # MAX clamp = the user's --step (so the original feel is preserved
-        # as a hard cap). MIN clamp must be high enough to clear the game's
-        # raw-input dead zone or we never move.
-        STEP_MIN_PX = 6.0
-        STEP_MAX_PX = max(20.0, self.step_px)
+        # MIN clamp: must clear the game's raw-input dead zone -- below
+        # this we observe zero motion and the controller stalls. MAX clamp
+        # is the user's --step.
+        STEP_MIN_PX = 30.0
+        STEP_MAX_PX = max(40.0, self.step_px)
+        # When error is at least one full cell away on the active axis,
+        # bypass the proportional law and send STEP_MAX directly. This
+        # eliminates the slow ramp-down to a tiny nudge during long hops.
+        OVERDRIVE_CELL_FRAC = 1.0
         # Dead-band: stop nudging an axis once the orange dot is within
-        # this fraction of cell_size from the target center. The cyan ring
-        # transition will advance the target on the next tick.
-        TOL_FRAC = 0.20
+        # this fraction of cell_size from the target center. The cyan
+        # ring transition advances the target on the next tick.
+        TOL_FRAC = 0.15
         # Stagnation watchdog: if no panel-pixel progress for this many
-        # consecutive ticks on an axis, double the step (probably below
-        # the game's mouse-input dead zone). Reset after any progress.
-        STAGNATION_TICKS = 4
+        # consecutive ticks on an axis, double the step until something
+        # moves (handles low in-game sensitivity / mouse dead zone).
+        STAGNATION_TICKS = 3
+        # Hard sanity bounds on per-update observations of OS_px / panel_px;
+        # protects the EMA from a single huge or tiny outlier.
+        GAIN_OBS_MIN, GAIN_OBS_MAX = 0.3, 5.0
         last_sent = {"h": 0.0, "v": 0.0}
         last_axis: str | None = None
+        last_was_probe = False
         last_panel_pos: tuple[float, float] | None = None
+        last_cell_idx: tuple[int, int] | None = path[0]
         stagnation = 0
 
         while True:
@@ -535,11 +544,22 @@ class AssistApp:
                 cur_py = (cur_cell[0] + 0.5) * plan.cell_h
 
             # ---- online gain update (uses motion observed since last move) ----
-            if (last_axis is not None and last_panel_pos is not None
-                    and abs(last_sent[last_axis]) > 0):
-                # Project observed panel motion onto the panel axis the
-                # last move was meant to drive. Sign-check filters out
-                # detection jitter going against our move.
+            # Skip when the previous move was a stagnation PROBE (doubled
+            # step) or when the cursor jumped >1 cell in one tick (likely
+            # caused by a saturated probe): the (sent / observed) ratio
+            # in those cases is not a reliable steady-state gain.
+            cells_jumped = (
+                abs(cur_cell[0] - last_cell_idx[0]) +
+                abs(cur_cell[1] - last_cell_idx[1])
+                if last_cell_idx is not None else 0
+            )
+            if (
+                last_axis is not None
+                and last_panel_pos is not None
+                and abs(last_sent[last_axis]) > 0
+                and not last_was_probe
+                and cells_jumped <= 1
+            ):
                 if last_axis == "h":
                     panel_dir = (1.0 if last_sent["h"] > 0 else -1.0)
                     observed = (cur_px - last_panel_pos[0]) * panel_dir
@@ -548,9 +568,9 @@ class AssistApp:
                     observed = (cur_py - last_panel_pos[1]) * panel_dir
                 if observed > 1.0:
                     g_obs = abs(last_sent[last_axis]) / observed
-                    # Slow EMA: detection is noisy, don't overreact.
+                    g_obs = float(np.clip(g_obs, GAIN_OBS_MIN, GAIN_OBS_MAX))
                     gain[last_axis] = 0.7 * gain[last_axis] + 0.3 * g_obs
-                    gain[last_axis] = float(np.clip(gain[last_axis], 0.2, 50.0))
+                    gain[last_axis] = float(np.clip(gain[last_axis], 0.2, 5.0))
                     stagnation = 0
                 else:
                     stagnation += 1
@@ -598,6 +618,7 @@ class AssistApp:
                 # cyan-ring detection to advance the target next tick.
                 last_axis = None
                 last_sent = {"h": 0.0, "v": 0.0}
+                last_was_probe = False
                 if self.tick_s > 0:
                     time.sleep(self.tick_s)
                 continue
@@ -617,24 +638,29 @@ class AssistApp:
             scr_axis = "h" if abs(sx) > abs(sy) else "v"
 
             # Proportional law in the panel domain, converted to OS pixels
-            # by the current gain estimate (OS_px per panel_px).
-            os_step_signed = err * gain[scr_axis]
-            mag = float(np.clip(abs(os_step_signed), STEP_MIN_PX, STEP_MAX_PX))
+            # by the current gain estimate (OS_px per panel_px). When the
+            # error is at least one full cell away, overdrive to STEP_MAX
+            # so long hops don't ramp down to tiny nudges.
+            cell_size = plan.cell_w if panel_axis == "x" else plan.cell_h
+            if abs(err) >= OVERDRIVE_CELL_FRAC * cell_size:
+                mag = STEP_MAX_PX
+            else:
+                os_step = abs(err) * gain[scr_axis]
+                mag = float(np.clip(os_step, STEP_MIN_PX, STEP_MAX_PX))
 
             # Stagnation: probably in the game's mouse-input dead zone.
-            # Push harder. Doubles each STAGNATION_TICKS ticks until we move.
+            # Push harder. Doubles each STAGNATION_TICKS ticks until we
+            # observe motion. Mark this as a probe so the gain update on
+            # the next iteration ignores it.
+            is_probe = False
             if stagnation >= STAGNATION_TICKS:
                 mag = min(STEP_MAX_PX * 4.0, mag * 2.0)
-                # don't reset stagnation here; let the next observation do it
+                is_probe = True
                 if stagnation == STAGNATION_TICKS:
                     print(f"[walk] stagnation -> probing {mag:.0f} OS px on {scr_axis}")
 
-            sgn = 1.0 if os_step_signed > 0 else -1.0
-            os_dx = sx * mag * (1.0 if (sx * sgn) >= 0 else -1.0)
-            os_dy = sy * mag * (1.0 if (sy * sgn) >= 0 else -1.0)
-            # Simpler: the panel_axis_to_screen_axis already encodes the
-            # *sign* needed to push err toward zero (we passed a +1/-1 by
-            # error sign). So just send |mag| along (sx, sy).
+            # panel_axis_to_screen_axis already returned the (sx, sy)
+            # whose sign drives `err` toward zero, so just scale by mag.
             os_dx = sx * mag
             os_dy = sy * mag
 
@@ -643,6 +669,8 @@ class AssistApp:
             last_sent[scr_axis] = os_dx if scr_axis == "h" else os_dy
             last_axis = scr_axis
             last_panel_pos = (cur_px, cur_py)
+            last_cell_idx = cur_cell
+            last_was_probe = is_probe
 
             if self.tick_s > 0:
                 time.sleep(self.tick_s)
