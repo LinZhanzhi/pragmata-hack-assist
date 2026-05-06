@@ -209,6 +209,15 @@ class PlanResult:
     cell_h: float
 
 
+@dataclass
+class PanelView:
+    panel_bgr: np.ndarray
+    M_inv: np.ndarray            # 3x3 panel->client homography for this frame
+    xyxy: np.ndarray
+    kpts: np.ndarray
+    conf: float
+
+
 class Engine:
     def __init__(self):
         from ultralytics import YOLO
@@ -229,19 +238,58 @@ class Engine:
             transforms.Normalize([0.5] * 3, [0.5] * 3),
         ])
 
-    def plan(self, client_bgr: np.ndarray,
-             debug_dir: "Path | None" = None) -> "PlanResult | None":
-        # 1. detect panel
+    def detect_and_warp_panel(
+        self,
+        client_bgr: np.ndarray,
+        out_size: tuple[int, int] | None = None,
+    ) -> PanelView | None:
+        """Detect the panel in ``client_bgr`` and warp it.
+
+        If ``out_size`` is provided, the panel is warped to that fixed
+        canonical size (width, height). This lets the live walker re-detect
+        the panel on every frame while keeping a stable panel coordinate
+        system for the path grid and Jacobian calibration.
+        """
         results = self.yolo.predict(source=client_bgr, conf=0.25, verbose=False)
         if not results or len(results[0].boxes) == 0:
-            print("[plan] no panel detected")
-            if debug_dir is not None:
-                cv2.imwrite(str(debug_dir / "01_capture.png"), client_bgr)
             return None
+
         boxes = results[0].boxes
         best = int(boxes.conf.argmax().item())
         xyxy = boxes.xyxy[best].cpu().numpy()
         kpts = corners_from_bbox(xyxy)  # 4x2 in client coords (TL,TR,BR,BL)
+        conf = float(boxes.conf[best])
+
+        if out_size is None:
+            out_w, out_h = warp_size_from_bbox(xyxy)
+        else:
+            out_w, out_h = (int(out_size[0]), int(out_size[1]))
+
+        dst = np.array([[0, 0], [out_w - 1, 0],
+                        [out_w - 1, out_h - 1], [0, out_h - 1]],
+                       dtype=np.float32)
+        M = cv2.getPerspectiveTransform(kpts, dst)
+        M_inv = np.linalg.inv(M)
+        panel = cv2.warpPerspective(client_bgr, M, (out_w, out_h))
+        return PanelView(
+            panel_bgr=panel,
+            M_inv=M_inv,
+            xyxy=xyxy,
+            kpts=kpts,
+            conf=conf,
+        )
+
+    def plan(self, client_bgr: np.ndarray,
+             debug_dir: "Path | None" = None) -> "PlanResult | None":
+        # 1. detect panel
+        panel_view = self.detect_and_warp_panel(client_bgr)
+        if panel_view is None:
+            print("[plan] no panel detected")
+            if debug_dir is not None:
+                cv2.imwrite(str(debug_dir / "01_capture.png"), client_bgr)
+            return None
+        xyxy = panel_view.xyxy
+        kpts = panel_view.kpts
 
         if debug_dir is not None:
             cv2.imwrite(str(debug_dir / "01_capture.png"), client_bgr)
@@ -252,18 +300,13 @@ class Engine:
                              (255, 0, 255), (255, 255, 0)]  # TL TR BR BL
             for (cx, cy), col in zip(kpts, corner_colors):
                 cv2.circle(vis, (int(round(cx)), int(round(cy))), 6, col, -1)
-            cv2.putText(vis, f"conf={float(boxes.conf[best]):.2f}",
+            cv2.putText(vis, f"conf={panel_view.conf:.2f}",
                         (x0, max(0, y0 - 8)), cv2.FONT_HERSHEY_SIMPLEX,
                         0.6, (0, 255, 0), 2)
             cv2.imwrite(str(debug_dir / "02_capture_with_bbox.png"), vis)
 
-        out_w, out_h = warp_size_from_bbox(xyxy)
-        dst = np.array([[0, 0], [out_w - 1, 0],
-                        [out_w - 1, out_h - 1], [0, out_h - 1]],
-                       dtype=np.float32)
-        M = cv2.getPerspectiveTransform(kpts, dst)
-        M_inv = np.linalg.inv(M)
-        panel = cv2.warpPerspective(client_bgr, M, (out_w, out_h))
+        panel = panel_view.panel_bgr
+        M_inv = panel_view.M_inv
 
         if debug_dir is not None:
             cv2.imwrite(str(debug_dir / "03_panel_warped.png"), panel)
@@ -420,21 +463,37 @@ class AssistApp:
         finally:
             self.busy = False
 
-    def _measure_orange_panel(self, M_panel_from_client, W, H):
-        """Capture the game window and return the orange-dot centroid in
-        panel pixels, or None. Searches the WHOLE panel (not gated to a
-        cell) so it works during calibration when the cyan ring may lag.
+    def _capture_panel_view(self, W, H) -> PanelView | None:
+        """Capture a fresh game frame, re-detect the panel in that frame,
+        and warp it into the fixed canonical panel size ``(W, H)``.
+
+        This deliberately avoids using a saved transform across frames. If
+        the panel slides or scales while the walk is running, the next step
+        still reasons about a freshly re-locked panel view.
         """
         client = capture_window_client(self.target_hwnd)
         if client is None:
             return None
-        panel = cv2.warpPerspective(client, M_panel_from_client, (W, H))
-        info = detect_orange_current(panel)
+        if self.engine is None:
+            return None
+        return self.engine.detect_and_warp_panel(client, out_size=(W, H))
+
+    def _measure_orange_panel(self, W, H):
+        """Capture a fresh frame, re-detect + re-warp the panel, then
+        return the orange-dot centroid in canonical panel pixels.
+
+        Searches the WHOLE panel (not gated to a cell) so it works during
+        calibration when the cyan ring may lag.
+        """
+        panel_view = self._capture_panel_view(W, H)
+        if panel_view is None:
+            return None
+        info = detect_orange_current(panel_view.panel_bgr)
         if info is None:
             return None
         return float(info["center"][0]), float(info["center"][1])
 
-    def _calibrate_jacobian(self, M_panel_from_client, W, H, plan):
+    def _calibrate_jacobian(self, W, H, plan):
         """Probe the mouse on two screen directions, measure how the
         orange dot moves in panel pixels, return the 2x2 Jacobian
         ``J`` such that  panel_delta = J @ os_delta (panel_px / OS_px).
@@ -457,7 +516,7 @@ class AssistApp:
 
         def measure(retries=3):
             for _ in range(retries):
-                p = self._measure_orange_panel(M_panel_from_client, W, H)
+                p = self._measure_orange_panel(W, H)
                 if p is not None:
                     return p
                 time.sleep(0.02)
@@ -575,17 +634,18 @@ class AssistApp:
     def walk_path(self, plan: PlanResult):
         """Calibrate-then-drive walker.
 
-        Step 1 (once per trigger): send two small mouse probes on screen
-        +X and +Y, measure the resulting panel-pixel motion of the orange
-        dot, build a 2x2 Jacobian ``J`` (panel_px per OS_px). This single
-        measurement captures everything specific to the current panel:
-        cell size, perspective, AND the game's mouse-to-cursor sign /
-        sensitivity coupling.
+        Step 1 (once per trigger): send two small mouse probes and measure
+        the resulting orange-dot motion in a canonical panel coordinate
+        system. Each calibration sample re-detects the panel in a fresh
+        frame and re-warps it into that canonical size, so calibration
+        still works even if the panel moves after trigger time.
 
-        Step 2 (per tick): error in panel pixels to the target cell
-        center, multiplied by ``J^-1``, gives the OS mouse delta to send.
-        Magnitude is capped at ``--step``. As soon as the cyan ring
-        reaches the target cell we advance to the next path step.
+        Step 2 (per tick): capture a fresh frame, re-detect the panel,
+        re-warp it into that same canonical size, locate the current cell
+        and orange dot there, then convert panel error to an OS mouse
+        delta via ``J^-1``. Magnitude is capped at ``--step``. As soon as
+        the cyan ring reaches the target cell we advance to the next path
+        step.
         """
         path = plan.path
         if not path or len(path) < 2:
@@ -595,11 +655,10 @@ class AssistApp:
         path_set = {cell: i for i, cell in enumerate(path)}
         H = plan.panel_bgr.shape[0]
         W = plan.panel_bgr.shape[1]
-        M_panel_from_client = np.linalg.inv(plan.M_inv)
 
         # ---- 1. calibrate ----
         print("[walk] calibrating mouse->panel mapping...")
-        J = self._calibrate_jacobian(M_panel_from_client, W, H, plan)
+        J = self._calibrate_jacobian(W, H, plan)
         if J is None:
             print("[walk] calibration failed; aborting walk")
             return
@@ -626,15 +685,15 @@ class AssistApp:
 
             ticks_in_hop += 1
             if ticks_in_hop > WALK_MAX_TICKS_PER_HOP:
-                print(f"[walk] hop budget exceeded; giving up")
+                print("[walk] hop budget exceeded; giving up")
                 return
 
-            client = capture_window_client(self.target_hwnd)
-            if client is None:
+            panel_view = self._capture_panel_view(W, H)
+            if panel_view is None:
                 if TICK > 0:
                     time.sleep(TICK)
                 continue
-            panel = cv2.warpPerspective(client, M_panel_from_client, (W, H))
+            panel = panel_view.panel_bgr
 
             cur_cell = find_current_cell(panel, plan.n_rows, plan.n_cols,
                                          exclude=plan.goal)
@@ -805,7 +864,7 @@ def main():
     ap.add_argument("--step", type=float, default=WALK_STEP_PX,
                     help=f"OS-pixel magnitude per mouse nudge (default {WALK_STEP_PX}).")
     ap.add_argument("--tick", type=float, default=WALK_TICK_S,
-                    help="Sleep seconds between ticks; 0 = fastest (default 0).")
+                    help=f"Sleep seconds between ticks (default {WALK_TICK_S}).")
     ap.add_argument("--debug", action="store_true",
                     help="Dump per-trigger artifacts under panel_detector/runs/debug/.")
     args = ap.parse_args()
