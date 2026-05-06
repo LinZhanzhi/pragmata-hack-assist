@@ -426,6 +426,61 @@ class AssistApp:
         self._mouse_l.start()
         self._kbd_l.start()
 
+    def _write_walk_trace_debug(
+        self,
+        debug_dir: Path,
+        plan: PlanResult,
+        trace_points: list[tuple[float, float, bool]],
+        end_reason: str,
+    ) -> None:
+        """Write one debug image showing planned path vs observed walk trace.
+
+        The base image is the planned overlay (already in the canonical
+        warped-panel coordinate system). On top of it we draw the observed
+        orange-dot positions from each captured frame during the walk.
+
+        Direct orange detections are drawn as orange circles; fallback
+        positions (cell centers used when the orange dot was not detected)
+        are drawn as yellow X markers so detection dropouts are visible.
+        """
+        canvas = plan.overlay_bgr.copy()
+
+        if trace_points:
+            pts = np.array([(x, y) for x, y, _direct in trace_points],
+                           dtype=np.int32)
+            if len(pts) >= 2:
+                cv2.polylines(canvas, [pts], False, (0, 0, 0), 4, cv2.LINE_AA)
+                cv2.polylines(canvas, [pts], False, (0, 165, 255), 2, cv2.LINE_AA)
+
+            for i, (x, y, direct) in enumerate(trace_points):
+                px = int(round(x))
+                py = int(round(y))
+                if direct:
+                    cv2.circle(canvas, (px, py), 4, (0, 165, 255), -1, cv2.LINE_AA)
+                    cv2.circle(canvas, (px, py), 6, (0, 0, 0), 1, cv2.LINE_AA)
+                else:
+                    cv2.line(canvas, (px - 4, py - 4), (px + 4, py + 4),
+                             (0, 255, 255), 2, cv2.LINE_AA)
+                    cv2.line(canvas, (px - 4, py + 4), (px + 4, py - 4),
+                             (0, 255, 255), 2, cv2.LINE_AA)
+                if i % 5 == 0:
+                    cv2.putText(canvas, str(i), (px + 6, py - 6),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.4,
+                                (255, 255, 255), 1, cv2.LINE_AA)
+
+            fx = int(round(trace_points[-1][0]))
+            fy = int(round(trace_points[-1][1]))
+            cv2.circle(canvas, (fx, fy), 8, (255, 255, 255), 2, cv2.LINE_AA)
+
+        cv2.rectangle(canvas, (8, 8), (520, 58), (0, 0, 0), -1)
+        cv2.putText(canvas, "planned path + observed orange-dot trace",
+                    (16, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.55,
+                    (255, 255, 255), 1, cv2.LINE_AA)
+        cv2.putText(canvas, f"samples={len(trace_points)}  end={end_reason}",
+                    (16, 49), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                    (200, 200, 200), 1, cv2.LINE_AA)
+        cv2.imwrite(str(debug_dir / "06_walk_trace.png"), canvas)
+
     # ---- core: plan and walk ----
     def trigger(self):
         if self.busy or self.engine is None or self.target_hwnd is None:
@@ -457,7 +512,7 @@ class AssistApp:
                   f"rewards={plan.rewards} ({(time.time()-t0)*1000:.0f} ms)")
             if not plan.path:
                 return
-            self.walk_path(plan)
+            self.walk_path(plan, debug_dir=debug_dir)
         except Exception:
             traceback.print_exc()
         finally:
@@ -631,7 +686,7 @@ class AssistApp:
             return None
         return J
 
-    def walk_path(self, plan: PlanResult):
+    def walk_path(self, plan: PlanResult, debug_dir: Path | None = None):
         """Calibrate-then-drive walker.
 
         Step 1 (once per trigger): send two small mouse probes and measure
@@ -648,123 +703,139 @@ class AssistApp:
         step.
         """
         path = plan.path
-        if not path or len(path) < 2:
-            print("[walk] nothing to walk")
-            return
+        trace_points: list[tuple[float, float, bool]] = []
+        end_reason = "unknown"
 
-        path_set = {cell: i for i, cell in enumerate(path)}
-        H = plan.panel_bgr.shape[0]
-        W = plan.panel_bgr.shape[1]
-
-        # ---- 1. calibrate ----
-        print("[walk] calibrating mouse->panel mapping...")
-        J = self._calibrate_jacobian(W, H, plan)
-        if J is None:
-            print("[walk] calibration failed; aborting walk")
-            return
-        J_inv = np.linalg.inv(J)
-        print(f"[walk] J (panel_px / OS_px):\n"
-              f"       [[{J[0,0]:+.3f} {J[0,1]:+.3f}]\n"
-              f"        [{J[1,0]:+.3f} {J[1,1]:+.3f}]]")
-
-        # ---- 2. drive ----
-        STEP_MAX = max(40.0, self.step_px)
-        TICK = self.tick_s
-        t_start = time.time()
-        last_cell_logged = path[0]
-        last_target = None
-        ticks_in_hop = 0
-
-        while True:
-            if self.abort_walk:
-                print("[walk] aborted (ESC)")
-                return
-            if not (self.rmb_down and self.x1_down):
-                print("[walk] aborted (trigger keys released)")
+        try:
+            if not path or len(path) < 2:
+                end_reason = "nothing_to_walk"
+                print("[walk] nothing to walk")
                 return
 
-            ticks_in_hop += 1
-            if ticks_in_hop > WALK_MAX_TICKS_PER_HOP:
-                print("[walk] hop budget exceeded; giving up")
+            path_set = {cell: i for i, cell in enumerate(path)}
+            H = plan.panel_bgr.shape[0]
+            W = plan.panel_bgr.shape[1]
+
+            # ---- 1. calibrate ----
+            print("[walk] calibrating mouse->panel mapping...")
+            J = self._calibrate_jacobian(W, H, plan)
+            if J is None:
+                end_reason = "calibration_failed"
+                print("[walk] calibration failed; aborting walk")
                 return
+            J_inv = np.linalg.inv(J)
+            print(f"[walk] J (panel_px / OS_px):\n"
+                  f"       [[{J[0,0]:+.3f} {J[0,1]:+.3f}]\n"
+                  f"        [{J[1,0]:+.3f} {J[1,1]:+.3f}]]")
 
-            panel_view = self._capture_panel_view(W, H)
-            if panel_view is None:
-                if TICK > 0:
-                    time.sleep(TICK)
-                continue
-            panel = panel_view.panel_bgr
+            # ---- 2. drive ----
+            STEP_MAX = max(40.0, self.step_px)
+            TICK = self.tick_s
+            t_start = time.time()
+            last_cell_logged = path[0]
+            last_target = None
+            ticks_in_hop = 0
 
-            cur_cell = find_current_cell(panel, plan.n_rows, plan.n_cols,
-                                         exclude=plan.goal)
-            if cur_cell is None:
-                if TICK > 0:
-                    time.sleep(TICK)
-                continue
-
-            # Panel-pixel position of the dot. Prefer cell-gated detector
-            # (more robust against red icons), fall back to whole-panel.
-            orange = find_orange_centroid_in_cell(
-                panel, cur_cell, plan.n_rows, plan.n_cols)
-            if orange is None:
-                p_any = detect_orange_current(panel)
-                orange = (p_any["center"][0], p_any["center"][1]) if p_any else None
-            if orange is None:
-                cur_px = (cur_cell[1] + 0.5) * plan.cell_w
-                cur_py = (cur_cell[0] + 0.5) * plan.cell_h
-            else:
-                cur_px, cur_py = orange
-
-            # ---- pick target cell (advance whenever cyan ring reaches it) ----
-            on_path = cur_cell in path_set
-            if on_path:
-                cur_idx = path_set[cur_cell]
-                if cur_idx >= len(path) - 1:
-                    print(f"[walk] reached goal in "
-                          f"{time.time() - t_start:.2f}s")
+            while True:
+                if self.abort_walk:
+                    end_reason = "aborted_esc"
+                    print("[walk] aborted (ESC)")
                     return
-                target = path[cur_idx + 1]
-            else:
-                target = min(path, key=lambda p: abs(p[0] - cur_cell[0])
-                             + abs(p[1] - cur_cell[1]))
+                if not (self.rmb_down and self.x1_down):
+                    end_reason = "trigger_released"
+                    print("[walk] aborted (trigger keys released)")
+                    return
 
-            if cur_cell != last_cell_logged:
-                last_cell_logged = cur_cell
-                tag = "on-path" if on_path else "OFF-path -> recovering"
-                print(f"[walk] now at {cur_cell} ({tag}, target {target})")
+                ticks_in_hop += 1
+                if ticks_in_hop > WALK_MAX_TICKS_PER_HOP:
+                    end_reason = "hop_budget_exceeded"
+                    print("[walk] hop budget exceeded; giving up")
+                    return
 
-            if target != last_target:
-                ticks_in_hop = 0
-                last_target = target
+                panel_view = self._capture_panel_view(W, H)
+                if panel_view is None:
+                    if TICK > 0:
+                        time.sleep(TICK)
+                    continue
+                panel = panel_view.panel_bgr
 
-            tgt_px = (target[1] + 0.5) * plan.cell_w
-            tgt_py = (target[0] + 0.5) * plan.cell_h
-            err_panel = np.array([tgt_px - cur_px, tgt_py - cur_py])
+                cur_cell = find_current_cell(panel, plan.n_rows, plan.n_cols,
+                                             exclude=plan.goal)
+                if cur_cell is None:
+                    if TICK > 0:
+                        time.sleep(TICK)
+                    continue
 
-            # Convert panel-pixel error to OS-pixel mouse delta.
-            # Damping (<1) absorbs small calibration error and prevents
-            # the overshoot/correct/overshoot oscillation that looked
-            # like "infinite flipping".
-            os_delta = WALK_DAMPING * (J_inv @ err_panel)
-            mag = float(np.linalg.norm(os_delta))
-            if mag < 1.0:
-                # Already at target in OS terms; let the cyan ring catch up.
+                # Panel-pixel position of the dot. Prefer cell-gated detector
+                # (more robust against red icons), fall back to whole-panel.
+                orange = find_orange_centroid_in_cell(
+                    panel, cur_cell, plan.n_rows, plan.n_cols)
+                orange_direct = orange is not None
+                if orange is None:
+                    p_any = detect_orange_current(panel)
+                    orange = (p_any["center"][0], p_any["center"][1]) if p_any else None
+                if orange is None:
+                    cur_px = (cur_cell[1] + 0.5) * plan.cell_w
+                    cur_py = (cur_cell[0] + 0.5) * plan.cell_h
+                else:
+                    cur_px, cur_py = orange
+                trace_points.append((float(cur_px), float(cur_py), orange_direct))
+
+                # ---- pick target cell (advance whenever cyan ring reaches it) ----
+                on_path = cur_cell in path_set
+                if on_path:
+                    cur_idx = path_set[cur_cell]
+                    if cur_idx >= len(path) - 1:
+                        end_reason = "reached_goal"
+                        print(f"[walk] reached goal in "
+                              f"{time.time() - t_start:.2f}s")
+                        return
+                    target = path[cur_idx + 1]
+                else:
+                    target = min(path, key=lambda p: abs(p[0] - cur_cell[0])
+                                 + abs(p[1] - cur_cell[1]))
+
+                if cur_cell != last_cell_logged:
+                    last_cell_logged = cur_cell
+                    tag = "on-path" if on_path else "OFF-path -> recovering"
+                    print(f"[walk] now at {cur_cell} ({tag}, target {target})")
+
+                if target != last_target:
+                    ticks_in_hop = 0
+                    last_target = target
+
+                tgt_px = (target[1] + 0.5) * plan.cell_w
+                tgt_py = (target[0] + 0.5) * plan.cell_h
+                err_panel = np.array([tgt_px - cur_px, tgt_py - cur_py])
+
+                # Convert panel-pixel error to OS-pixel mouse delta.
+                # Damping (<1) absorbs small calibration error and prevents
+                # the overshoot/correct/overshoot oscillation that looked
+                # like "infinite flipping".
+                os_delta = WALK_DAMPING * (J_inv @ err_panel)
+                mag = float(np.linalg.norm(os_delta))
+                if mag < 1.0:
+                    # Already at target in OS terms; let the cyan ring catch up.
+                    if TICK > 0:
+                        time.sleep(TICK)
+                    continue
+                if mag > STEP_MAX:
+                    os_delta = os_delta * (STEP_MAX / mag)
+                    mag = STEP_MAX
+
+                # MOVE -> SETTLE -> (next iter captures fresh frame).
+                move_cursor_rel(float(os_delta[0]), float(os_delta[1]))
+                if self.debug:
+                    print(f"[walk] err=({err_panel[0]:+.0f},{err_panel[1]:+.0f}) px "
+                          f"-> os=({os_delta[0]:+.0f},{os_delta[1]:+.0f}) "
+                          f"mag={mag:.0f}")
+
                 if TICK > 0:
                     time.sleep(TICK)
-                continue
-            if mag > STEP_MAX:
-                os_delta = os_delta * (STEP_MAX / mag)
-                mag = STEP_MAX
-
-            # MOVE -> SETTLE -> (next iter captures fresh frame).
-            move_cursor_rel(float(os_delta[0]), float(os_delta[1]))
-            if self.debug:
-                print(f"[walk] err=({err_panel[0]:+.0f},{err_panel[1]:+.0f}) px "
-                      f"-> os=({os_delta[0]:+.0f},{os_delta[1]:+.0f}) "
-                      f"mag={mag:.0f}")
-
-            if TICK > 0:
-                time.sleep(TICK)
+        finally:
+            if debug_dir is not None:
+                self._write_walk_trace_debug(debug_dir, plan, trace_points,
+                                             end_reason)
 
     # ---- main loop ----
     def run_console(self, hwnd: int, title: str):
